@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  password      String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  subjects      Subject[]
+  flashcards    Flashcard[]
+  errorNotes    ErrorNote[]
+  sessions      StudySession[]
+  weeklyGoals   WeeklyGoal[]
+}
+
+model Subject {
+  id               String   @id @default(cuid())
+  name             String
+  editalWeight     Int      @default(5)
+  criticality      Int      @default(5)
+  recurrence       Int      @default(0)
+  studyHours       Float    @default(0)
+  totalQuestions   Int      @default(0)
+  correctQuestions Int      @default(0)
+  wrongQuestions   Int      @default(0)
+  totalPdfs        Int      @default(0)
+  completedPdfs    Int      @default(0)
+  progress         Int      @default(0)
+  lastStudyAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  topics           Topic[]
+  sessions         StudySession[]
+  errorNotes       ErrorNote[]
+  flashcards       Flashcard[]
+}
+
+model Topic {
+  id            String   @id @default(cuid())
+  name          String
+  progress      Int      @default(0)
+  totalPdfs     Int      @default(0)
+  completedPdfs Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  subjectId     String
+  subject       Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  pdfs          Pdf[]
+}
+
+model Pdf {
+  id               String   @id @default(cuid())
+  title            String
+  totalPages       Int      @default(0)
+  lastPageStudied  Int      @default(0)
+  studyHours       Float    @default(0)
+  questions        Int      @default(0)
+  correctQuestions Int      @default(0)
+  wrongQuestions   Int      @default(0)
+  completed        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  topicId          String
+  topic            Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  studyLogs        PdfStudyLog[]
+  reviews          Review[]
+}
+
+model PdfStudyLog {
+  id               String   @id @default(cuid())
+  studyHours       Float    @default(0)
+  questions        Int      @default(0)
+  correctQuestions Int      @default(0)
+  wrongQuestions   Int      @default(0)
+  startPage        Int      @default(0)
+  endPage          Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  pdfId            String
+  pdf              Pdf      @relation(fields: [pdfId], references: [id], onDelete: Cascade)
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  type       String
+  reviewDate DateTime
+  completed  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  pdfId      String
+  pdf        Pdf      @relation(fields: [pdfId], references: [id], onDelete: Cascade)
+}
+
+model StudySession {
+  id          String   @id @default(cuid())
+  duration    Int
+  studyHours  Float    @default(0)
+  questions   Int      @default(0)
+  correct     Int      @default(0)
+  wrong       Int      @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+}
+
+model Flashcard {
+  id             String   @id @default(cuid())
+  question       String
+  answer         String
+  topic          String?
+  banca          String?
+  difficulty     String   @default("Media")
+  intervalDays   Int      @default(1)
+  reviewCount    Int      @default(0)
+  wrongCount     Int      @default(0)
+  resolved       Boolean  @default(false)
+  nextReviewAt   DateTime?
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+}
+
+model ErrorNote {
+  id             String   @id @default(cuid())
+  title          String
+  description    String
+  topic          String?
+  banca          String?
+  difficulty     String   @default("Media")
+  resolved       Boolean  @default(false)
+  reviewCount    Int      @default(0)
+  wrongCount     Int      @default(0)
+  intervalDays   Int      @default(1)
+  nextReviewAt   DateTime?
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId      String
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyGoal {
+  id               String   @id @default(cuid())
+  weekStart        DateTime
+  targetHours      Float    @default(20)
+  targetQuestions  Int      @default(300)
+  targetPdfs       Int      @default(10)
+  targetReviews    Int      @default(20)
+  targetFlashcards Int      @default(100)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
