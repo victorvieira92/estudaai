@@ -7,7 +7,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({}, { status: 401 });
 
-  const uid = session.user.id;
+  const uid = session.user.id as string;
   const [subjects, errorNotes, reviews, sessions] = await Promise.all([
     prisma.subject.findMany({ where: { userId: uid }, include: { topics: { include: { pdfs: true } } } }),
     prisma.errorNote.findMany({ where: { userId: uid }, include: { subject: { select: { name: true } } } }),

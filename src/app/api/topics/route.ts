@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   const { name, subjectId } = await req.json();
   if (!name?.trim() || !subjectId) return NextResponse.json({ message: "Dados inválidos." }, { status: 400 });
 
-  const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId: session.user.id } });
+  const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId: session.user.id as string } });
   if (!subject) return NextResponse.json({ message: "Matéria não encontrada." }, { status: 404 });
 
   const topic = await prisma.topic.create({ data: { name: name.trim(), subjectId } });

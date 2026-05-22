@@ -8,7 +8,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
   const subjects = await prisma.subject.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id as string },
     orderBy: { name: "asc" },
     include: {
       topics: {
@@ -27,11 +27,11 @@ export async function POST(req: Request) {
   const { name, editalWeight = 5, criticality = 5, recurrence = 0 } = await req.json();
   if (!name?.trim()) return NextResponse.json({ message: "Informe o nome." }, { status: 400 });
 
-  const exists = await prisma.subject.findFirst({ where: { name: { equals: name.trim(), mode: "insensitive" }, userId: session.user.id } });
+  const exists = await prisma.subject.findFirst({ where: { name: { equals: name.trim(), mode: "insensitive" }, userId: session.user.id as string } });
   if (exists) return NextResponse.json({ message: "Matéria já cadastrada." }, { status: 409 });
 
   const subject = await prisma.subject.create({
-    data: { name: name.trim(), editalWeight, criticality, recurrence, userId: session.user.id },
+    data: { name: name.trim(), editalWeight, criticality, recurrence, userId: session.user.id as string },
   });
   return NextResponse.json(subject);
 }

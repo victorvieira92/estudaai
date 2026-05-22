@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     await prisma.$transaction(async (tx) => {
       // 1. Sessão de estudo
       await tx.studySession.create({
-        data: { userId: session.user!.id, subjectId, duration, studyHours: hours, questions, correct, wrong },
+        data: { userId: session.user!.id as string, subjectId, duration, studyHours: hours, questions, correct, wrong },
       });
 
       // 2. PDF (se selecionado)
@@ -82,7 +82,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
   const sessions = await prisma.studySession.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id as string },
     orderBy: { createdAt: "desc" },
     take: 60,
     include: { subject: { select: { name: true } } },

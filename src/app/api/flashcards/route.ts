@@ -9,7 +9,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
   const cards = await prisma.flashcard.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id as string },
     orderBy: { createdAt: "desc" },
     include: { subject: { select: { name: true } } },
   });
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   const today = startOfToday();
   const card = await prisma.flashcard.create({
-    data: { question: question.trim(), answer: answer.trim(), subjectId, topic, banca, difficulty, userId: session.user.id, nextReviewAt: addDays(today, 1) },
+    data: { question: question.trim(), answer: answer.trim(), subjectId, topic, banca, difficulty, userId: session.user.id as string, nextReviewAt: addDays(today, 1) },
   });
   return NextResponse.json(card);
 }
@@ -36,7 +36,7 @@ export async function PATCH(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
   const { id, result } = await req.json(); // result: "easy"|"medium"|"hard"|"wrong"
-  const card = await prisma.flashcard.findFirst({ where: { id, userId: session.user.id } });
+  const card = await prisma.flashcard.findFirst({ where: { id, userId: session.user.id as string } });
   if (!card) return NextResponse.json({ message: "Card não encontrado." }, { status: 404 });
 
   const intervalMap: Record<string, number> = { easy: card.intervalDays * 2, medium: card.intervalDays, hard: Math.max(1, Math.floor(card.intervalDays / 2)), wrong: 1 };

@@ -8,7 +8,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
   const reviews = await prisma.review.findMany({
-    where: { pdf: { topic: { subject: { userId: session.user.id } } } },
+    where: { pdf: { topic: { subject: { userId: session.user.id as string } } } },
     orderBy: { reviewDate: "asc" },
     include: { pdf: { include: { topic: { include: { subject: { select: { name: true } } } } } } },
   });

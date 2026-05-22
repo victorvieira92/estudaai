@@ -9,7 +9,7 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
 
   const notes = await prisma.errorNote.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id as string },
     orderBy: { createdAt: "desc" },
     include: { subject: { select: { name: true } } },
   });
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   const today = startOfToday();
   const note = await prisma.errorNote.create({
-    data: { title: title.trim(), description: description.trim(), subjectId, topic, banca, difficulty, userId: session.user.id, nextReviewAt: addDays(today, 1) },
+    data: { title: title.trim(), description: description.trim(), subjectId, topic, banca, difficulty, userId: session.user.id as string, nextReviewAt: addDays(today, 1) },
   });
   return NextResponse.json(note);
 }
@@ -36,7 +36,7 @@ export async function PATCH(req: Request) {
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
   const { id, action } = await req.json(); // action: "resolve"|"review"|"wrong"
-  const note = await prisma.errorNote.findFirst({ where: { id, userId: session.user.id } });
+  const note = await prisma.errorNote.findFirst({ where: { id, userId: session.user.id as string } });
   if (!note) return NextResponse.json({ message: "Erro não encontrado." }, { status: 404 });
 
   if (action === "resolve") {
