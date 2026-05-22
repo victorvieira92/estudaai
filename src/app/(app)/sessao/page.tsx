@@ -47,8 +47,8 @@ export default function SessaoPage() {
   useEffect(() => { setPdfId(""); }, [topicId]);
   useEffect(() => {
     if (!pdfId || !pdf) return;
-    if (pdf.lastPageStudied > 0) setStartPage(String(pdf.lastPageStudied));
-    if (pdf.totalPages > 0) setTotalPages(String(pdf.totalPages));
+    if ((pdf?.lastPageStudied ?? 0) > 0) setStartPage(String(pdf?.lastPageStudied));
+    if ((pdf?.totalPages ?? 0) > 0) setTotalPages(String(pdf?.totalPages));
   }, [pdfId, pdf]);
 
   const doSave = async (seconds: number) => {
@@ -121,7 +121,7 @@ export default function SessaoPage() {
 
           {(pdf?.lastPageStudied ?? 0) > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-700">
-              📌 Você parou na página {pdf.lastPageStudied}. Continue a partir daí.
+              📌 Você parou na página {pdf?.lastPageStudied}. Continue a partir daí.
             </div>
           )}
 
@@ -152,7 +152,7 @@ export default function SessaoPage() {
           {pdf && (
             <button type="button" onClick={()=>setMarkCompleted(!markCompleted)}
               className={`flex items-center gap-3 text-sm rounded-lg px-4 py-2.5 border transition-colors ${markCompleted?"bg-gray-900 border-gray-900 text-white":"bg-white border-gray-300 text-gray-700 hover:border-gray-500"}`}>
-              <CheckSquare className="w-4 h-4"/>Marcar &quot;{pdf.title}&quot; como concluído
+              <CheckSquare className="w-4 h-4"/>Marcar &quot;{pdf?.title}&quot; como concluído
             </button>
           )}
 
