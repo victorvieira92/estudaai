@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { UTApi } from "uploadthing/server";
+
+const utapi = new UTApi();
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -11,49 +14,17 @@ export async function POST(req: Request) {
     const file = formData.get("file") as File;
     if (!file) return NextResponse.json({ message: "Nenhum arquivo enviado" }, { status: 400 });
 
-    const token = process.env.UPLOADTHING_TOKEN ?? "";
+    const response = await utapi.uploadFiles(file);
 
-    // Pede URL de upload para o Uploadthing
-    const presignRes = await fetch("https://uploadthing.com/api/uploadFiles", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Uploadthing-Api-Key": token,
-        "X-Uploadthing-Version": "6.4.0",
-      },
-      body: JSON.stringify({
-        files: [{ name: file.name, size: file.size, type: file.type }],
-        acl: "public-read",
-        contentDisposition: "inline",
-      }),
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+
+    return NextResponse.json({
+      url: response.data.url,
+      key: response.data.key,
+      name: response.data.name,
     });
-
-    if (!presignRes.ok) {
-      const txt = await presignRes.text();
-      throw new Error(`Uploadthing error: ${txt}`);
-    }
-
-    const presignData = await presignRes.json();
-    const uploadInfo = presignData.data?.[0] ?? presignData[0];
-
-    if (!uploadInfo?.url) throw new Error("URL de upload nao recebida");
-
-    // Faz o upload para S3
-    const s3Form = new FormData();
-    if (uploadInfo.fields) {
-      Object.entries(uploadInfo.fields).forEach(([k, v]) => s3Form.append(k, v as string));
-    }
-    s3Form.append("file", file);
-
-    const s3Res = await fetch(uploadInfo.url, { method: "POST", body: s3Form });
-    if (!s3Res.ok && s3Res.status !== 204) {
-      throw new Error(`S3 upload error: ${s3Res.status}`);
-    }
-
-    const key = uploadInfo.key ?? uploadInfo.fileKey ?? "";
-    const fileUrl = `https://utfs.io/f/${key}`;
-
-    return NextResponse.json({ url: fileUrl, key, name: file.name });
   } catch (e: any) {
     console.error("[upload]", e);
     return NextResponse.json({ message: e.message ?? "Erro no upload" }, { status: 500 });

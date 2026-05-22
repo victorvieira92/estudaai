@@ -23,6 +23,7 @@ export default function ResumosPage() {
   const [uploadSubjectId, setUploadSubjectId] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -41,52 +42,38 @@ export default function ResumosPage() {
     if (!file) return;
     setUploading(true);
     setError("");
+    setSuccess("");
 
     try {
-      // Usa FormData direto para a rota do uploadthing
+      // Envia para nossa API de upload simplificada
       const form = new FormData();
-      form.append("files", file);
+      form.append("file", file);
+      if (uploadSubjectId) form.append("subjectId", uploadSubjectId);
 
-      const res = await fetch("/api/uploadthing/resumoUploader", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: form,
       });
 
-      let url = "";
-      let key = "";
+      const data = await res.json();
 
-      if (res.ok) {
-        const data = await res.json();
-        const item = Array.isArray(data) ? data[0] : data;
-        url = item?.url ?? item?.fileUrl ?? "";
-        key = item?.key ?? item?.fileKey ?? "";
-      }
+      if (!res.ok) throw new Error(data.message ?? "Erro no upload");
 
-      // Se não funcionou via rota direta, usa a rota padrão
-      if (!url) {
-        const res2 = await fetch("/api/uploadthing", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            files: [{ name: file.name, size: file.size, type: file.type }],
-          }),
-        });
-        if (res2.ok) {
-          const data2 = await res2.json();
-          const item2 = Array.isArray(data2) ? data2[0] : data2;
-          url = item2?.url ?? item2?.fileUrl ?? "";
-          key = item2?.key ?? item2?.fileKey ?? "";
-        }
-      }
-
-      if (!url) throw new Error("Nao foi possivel obter URL de upload");
-
+      // Salva metadados no banco
       await fetch("/api/resumos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: file.name, url, key, subjectId: uploadSubjectId || null, size: file.size }),
+        body: JSON.stringify({
+          name: file.name,
+          url: data.url,
+          key: data.key,
+          subjectId: uploadSubjectId || null,
+          size: file.size,
+        }),
       });
 
+      setSuccess("Arquivo enviado com sucesso!");
+      setTimeout(() => setSuccess(""), 3000);
       await load();
     } catch (err: any) {
       setError(err.message ?? "Erro ao fazer upload.");
@@ -142,6 +129,7 @@ export default function ResumosPage() {
           </div>
           {uploading && <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-blue-700 text-sm"><div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />Enviando arquivo... aguarde</div>}
           {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm mt-3">{error}</div>}
+          {success && <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-green-700 text-sm mt-3">✓ {success}</div>}
         </div>
 
         <div className="grid grid-cols-3 gap-4">
