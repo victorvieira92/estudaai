@@ -119,7 +119,7 @@ export default function SessaoPage() {
             ))}
           </div>
 
-          {pdf?.lastPageStudied > 0 && (
+          {(pdf?.lastPageStudied ?? 0) > 0 && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-700">
               📌 Você parou na página {pdf.lastPageStudied}. Continue a partir daí.
             </div>
