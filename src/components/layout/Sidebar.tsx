@@ -4,19 +4,20 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, Brain,
-  FileText, BarChart2, Calendar, Zap, LogOut, Target, UserCircle
+  FileText, BarChart2, Calendar, Zap, LogOut, Target, UserCircle, FolderOpen
 } from "lucide-react";
 
 const nav = [
   { href: "/dashboard",    label: "Dashboard",        icon: LayoutDashboard },
   { href: "/hoje",         label: "Hoje",              icon: Sun },
-  { href: "/sessao",       label: "Sessão de Estudo",  icon: BookOpen },
+  { href: "/sessao",       label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/ciclo",        label: "Ciclo Inteligente", icon: Zap },
-  { href: "/materias",     label: "Matérias",          icon: Target },
-  { href: "/revisoes",     label: "Revisões",          icon: RefreshCw },
+  { href: "/materias",     label: "Materias",          icon: Target },
+  { href: "/revisoes",     label: "Revisoes",          icon: RefreshCw },
   { href: "/flashcards",   label: "Flashcards",        icon: Brain },
   { href: "/caderno",      label: "Caderno de Erros",  icon: FileText },
-  { href: "/estatisticas", label: "Estatísticas",      icon: BarChart2 },
+  { href: "/resumos",      label: "Resumos",           icon: FolderOpen },
+  { href: "/estatisticas", label: "Estatisticas",      icon: BarChart2 },
   { href: "/planejamento", label: "Planejamento",      icon: Calendar },
   { href: "/perfil",       label: "Minha Conta",       icon: UserCircle },
 ];
@@ -28,7 +29,7 @@ export function Sidebar() {
   return (
     <aside className="fixed left-0 top-0 h-screen w-56 bg-gray-950 flex flex-col z-50">
       <div className="px-5 py-6 border-b border-gray-800">
-        <p className="text-white font-bold text-lg">EstudaAí</p>
+        <p className="text-white font-bold text-lg">EstudaAi</p>
         <p className="text-gray-500 text-xs mt-0.5 truncate">{session?.user?.name ?? "Concurseiro"}</p>
       </div>
 
