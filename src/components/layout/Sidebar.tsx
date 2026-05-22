@@ -4,20 +4,21 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, Brain,
-  FileText, BarChart2, Calendar, Zap, LogOut, Target
+  FileText, BarChart2, Calendar, Zap, LogOut, Target, UserCircle
 } from "lucide-react";
 
 const nav = [
-  { href: "/dashboard",    label: "Dashboard",       icon: LayoutDashboard },
-  { href: "/hoje",         label: "Hoje",             icon: Sun },
-  { href: "/sessao",       label: "Sessão de Estudo", icon: BookOpen },
-  { href: "/ciclo",        label: "Ciclo Inteligente",icon: Zap },
-  { href: "/materias",     label: "Matérias",         icon: Target },
-  { href: "/revisoes",     label: "Revisões",         icon: RefreshCw },
-  { href: "/flashcards",   label: "Flashcards",       icon: Brain },
-  { href: "/caderno",      label: "Caderno de Erros", icon: FileText },
-  { href: "/estatisticas", label: "Estatísticas",     icon: BarChart2 },
-  { href: "/planejamento", label: "Planejamento",     icon: Calendar },
+  { href: "/dashboard",    label: "Dashboard",        icon: LayoutDashboard },
+  { href: "/hoje",         label: "Hoje",              icon: Sun },
+  { href: "/sessao",       label: "Sessão de Estudo",  icon: BookOpen },
+  { href: "/ciclo",        label: "Ciclo Inteligente", icon: Zap },
+  { href: "/materias",     label: "Matérias",          icon: Target },
+  { href: "/revisoes",     label: "Revisões",          icon: RefreshCw },
+  { href: "/flashcards",   label: "Flashcards",        icon: Brain },
+  { href: "/caderno",      label: "Caderno de Erros",  icon: FileText },
+  { href: "/estatisticas", label: "Estatísticas",      icon: BarChart2 },
+  { href: "/planejamento", label: "Planejamento",      icon: Calendar },
+  { href: "/perfil",       label: "Minha Conta",       icon: UserCircle },
 ];
 
 export function Sidebar() {
