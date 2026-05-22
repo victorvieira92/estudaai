@@ -22,6 +22,7 @@ export default function ResumosPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadSubjectId, setUploadSubjectId] = useState("");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
@@ -30,8 +31,7 @@ export default function ResumosPage() {
       fetch("/api/subjects").then(r => r.json()).catch(() => []),
     ]);
     setResumos(Array.isArray(r) ? r : []);
-    const list = Array.isArray(s) ? s : (s.subjects ?? []);
-    setSubjects(list);
+    setSubjects(Array.isArray(s) ? s : (s.subjects ?? []));
   };
 
   useEffect(() => { load(); }, []);
@@ -40,35 +40,56 @@ export default function ResumosPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setError("");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      if (uploadSubjectId) formData.append("subjectId", uploadSubjectId);
+      // Usa FormData direto para a rota do uploadthing
+      const form = new FormData();
+      form.append("files", file);
 
       const res = await fetch("/api/uploadthing/resumoUploader", {
         method: "POST",
-        body: formData,
+        body: form,
       });
 
-      if (!res.ok) throw new Error("Erro no upload");
-      const data = await res.json();
+      let url = "";
+      let key = "";
+
+      if (res.ok) {
+        const data = await res.json();
+        const item = Array.isArray(data) ? data[0] : data;
+        url = item?.url ?? item?.fileUrl ?? "";
+        key = item?.key ?? item?.fileKey ?? "";
+      }
+
+      // Se não funcionou via rota direta, usa a rota padrão
+      if (!url) {
+        const res2 = await fetch("/api/uploadthing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            files: [{ name: file.name, size: file.size, type: file.type }],
+          }),
+        });
+        if (res2.ok) {
+          const data2 = await res2.json();
+          const item2 = Array.isArray(data2) ? data2[0] : data2;
+          url = item2?.url ?? item2?.fileUrl ?? "";
+          key = item2?.key ?? item2?.fileKey ?? "";
+        }
+      }
+
+      if (!url) throw new Error("Nao foi possivel obter URL de upload");
 
       await fetch("/api/resumos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: file.name,
-          url: data[0]?.url ?? data.url ?? "",
-          key: data[0]?.key ?? data.key ?? "",
-          subjectId: uploadSubjectId || null,
-          size: file.size,
-        }),
+        body: JSON.stringify({ name: file.name, url, key, subjectId: uploadSubjectId || null, size: file.size }),
       });
 
       await load();
-    } catch {
-      alert("Erro ao fazer upload. Tente novamente.");
+    } catch (err: any) {
+      setError(err.message ?? "Erro ao fazer upload.");
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -89,8 +110,7 @@ export default function ResumosPage() {
 
   const filtered = resumos.filter(r => {
     const matchSub = subjectFilter === "all" || r.subjectId === subjectFilter || (subjectFilter === "none" && !r.subjectId);
-    const matchSearch = r.name.toLowerCase().includes(search.toLowerCase());
-    return matchSub && matchSearch;
+    return matchSub && r.name.toLowerCase().includes(search.toLowerCase());
   });
 
   const icon = (name: string) => name.endsWith(".pdf") ? "📄" : name.endsWith(".docx") || name.endsWith(".doc") ? "📝" : "📎";
@@ -99,16 +119,12 @@ export default function ResumosPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-gray-950 text-white px-8 py-8">
         <h1 className="text-3xl font-bold">Resumos</h1>
-        <p className="text-gray-400 text-sm mt-1">Faça upload dos seus resumos e acesse de qualquer lugar</p>
+        <p className="text-gray-400 text-sm mt-1">Faca upload dos seus resumos e acesse de qualquer lugar</p>
       </div>
 
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
-
-        {/* Upload */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Upload className="w-5 h-5" /> Enviar resumo
-          </h2>
+          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2"><Upload className="w-5 h-5" /> Enviar resumo</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Materia (opcional)</label>
@@ -124,15 +140,10 @@ export default function ResumosPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-gray-900 file:text-white file:text-sm file:cursor-pointer hover:file:bg-gray-700 disabled:opacity-50" />
             </div>
           </div>
-          {uploading && (
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-blue-700 text-sm">
-              <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-              Enviando arquivo... aguarde
-            </div>
-          )}
+          {uploading && <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-blue-700 text-sm"><div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />Enviando arquivo... aguarde</div>}
+          {error && <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm mt-3">{error}</div>}
         </div>
 
-        {/* KPIs */}
         <div className="grid grid-cols-3 gap-4">
           {[["Total", resumos.length], ["Tamanho", formatSize(resumos.reduce((a, r) => a + r.size, 0))], ["Materias", new Set(resumos.filter(r => r.subjectId).map(r => r.subjectId)).size]].map(([l, v]) => (
             <div key={l as string} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
@@ -142,25 +153,22 @@ export default function ResumosPage() {
           ))}
         </div>
 
-        {/* Filtros */}
         <div className="flex flex-wrap gap-3">
           <input type="text" placeholder="Buscar resumo..." value={search} onChange={e => setSearch(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 flex-1 min-w-48" />
           <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-            <option value="all">Todas as materias</option>
+            <option value="all">Todas</option>
             <option value="none">Sem materia</option>
             {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 
-        {/* Lista */}
         <div className="space-y-3">
           {filtered.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
               <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
               <p className="text-gray-500 font-medium">Nenhum resumo encontrado</p>
-              <p className="text-gray-400 text-sm mt-1">Faca upload do seu primeiro resumo acima</p>
             </div>
           ) : filtered.map(r => (
             <div key={r.id} className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-center gap-4">
