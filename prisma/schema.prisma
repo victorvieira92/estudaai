@@ -20,6 +20,7 @@ model User {
   errorNotes    ErrorNote[]
   sessions      StudySession[]
   weeklyGoals   WeeklyGoal[]
+  resumos       Resumo[]
 }
 
 model Subject {
@@ -46,6 +47,7 @@ model Subject {
   sessions         StudySession[]
   errorNotes       ErrorNote[]
   flashcards       Flashcard[]
+  resumos          Resumo[]
 }
 
 model Topic {
@@ -180,4 +182,20 @@ model WeeklyGoal {
 
   userId           String
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Resumo {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  key       String
+  size      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 }
