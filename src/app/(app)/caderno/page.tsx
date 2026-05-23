@@ -11,13 +11,13 @@ interface ErrorNote {
 }
 
 const ERROR_TYPES = [
-  { value: "desatencao",        label: "Desatenção",           desc: "Leu errado ou marcou sem pensar",                emoji: "😵" },
-  { value: "nao_estudei",       label: "Não estudei",          desc: "Conteúdo ainda não visto",                       emoji: "📚" },
-  { value: "nao_lembrei",       label: "Não lembrei",          desc: "Estudou mas esqueceu na hora",                   emoji: "🧠" },
-  { value: "confundi_conceitos",label: "Confundi conceitos",   desc: "Misturou dois assuntos parecidos",               emoji: "🔀" },
-  { value: "interpretacao",     label: "Erro de interpretação",desc: "Entendeu o enunciado de forma errada",           emoji: "📖" },
-  { value: "pegadinha",         label: "Pegadinha",            desc: "Questão com detalhe que induziu ao erro",        emoji: "🪤" },
-  { value: "outro",             label: "Outro",                desc: "Motivo diferente dos acima",                     emoji: "❓" },
+  { value: "desatencao",         label: "Desatenção",            desc: "Leu errado ou marcou sem pensar",           emoji: "😵" },
+  { value: "nao_estudei",        label: "Não estudei",           desc: "Conteúdo ainda não visto",                  emoji: "📚" },
+  { value: "nao_lembrei",        label: "Não lembrei",           desc: "Estudou mas esqueceu na hora",              emoji: "🧠" },
+  { value: "confundi_conceitos", label: "Confundi conceitos",    desc: "Misturou dois assuntos parecidos",          emoji: "🔀" },
+  { value: "interpretacao",      label: "Erro de interpretação", desc: "Entendeu o enunciado de forma errada",      emoji: "📖" },
+  { value: "pegadinha",          label: "Pegadinha",             desc: "Questão com detalhe que induziu ao erro",   emoji: "🪤" },
+  { value: "outro",              label: "Outro",                 desc: "Motivo diferente dos acima",                emoji: "❓" },
 ];
 
 function errorTypeLabel(value: string | null) {
@@ -109,10 +109,10 @@ export default function CadernoPage() {
           ))}
         </div>
 
-        {/* Formulário + legenda lado a lado */}
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Formulário */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        {/* Formulário + Tipos de erro lado a lado */}
+        <div className="grid grid-cols-3 gap-6">
+          {/* Formulário — ocupa 2/3 */}
+          <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
             <h2 className="text-lg font-semibold mb-4">Registrar novo erro</h2>
             <form onSubmit={add} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
@@ -151,7 +151,7 @@ export default function CadernoPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Por que errei / Explicação *</label>
-                <textarea value={desc} onChange={e => setDesc(e.target.value)} required rows={3}
+                <textarea value={desc} onChange={e => setDesc(e.target.value)} required rows={4}
                   placeholder="Explique o conceito correto, o que confundiu, como lembrar..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"/>
               </div>
@@ -173,19 +173,21 @@ export default function CadernoPage() {
             </form>
           </div>
 
-          {/* Legenda dos motivos */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Tipos de erro</h2>
-            <p className="text-xs text-gray-400 mb-4">Identificar o motivo ajuda a corrigir padrões e evitar repetição.</p>
-            <div className="space-y-3">
+          {/* Tipos de erro — ocupa 1/3 */}
+          <div className="col-span-1 bg-white rounded-2xl border border-gray-200 p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">Tipos de erro</h2>
+            <p className="text-xs text-gray-400 mb-3">Identificar o motivo ajuda a corrigir padrões.</p>
+            <div className="space-y-2">
               {ERROR_TYPES.map(t => (
-                <div key={t.value} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
-                  <span className="text-xl shrink-0">{t.emoji}</span>
+                <button key={t.value} type="button"
+                  onClick={() => setErrorType(t.value)}
+                  className={`w-full flex items-start gap-2 p-2.5 rounded-xl text-left transition-colors border ${errorType === t.value ? "border-gray-900 bg-gray-50" : "border-gray-100 bg-gray-50 hover:border-gray-300"}`}>
+                  <span className="text-base shrink-0">{t.emoji}</span>
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{t.label}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{t.desc}</p>
+                    <p className="text-xs font-semibold text-gray-800">{t.label}</p>
+                    <p className="text-xs text-gray-400 leading-tight">{t.desc}</p>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </div>
