@@ -457,6 +457,19 @@ export default function MateriasPage() {
 
                 {expanded === s.id && (
                   <div className="border-t border-gray-100 px-6 py-5 space-y-5 bg-gray-50">
+                    {/* Novo tópico — no topo */}
+                    <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
+                      <input
+                        value={topicSubjectId === s.id ? topicName : ""}
+                        onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }}
+                        placeholder="Novo tópico" required
+                        className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                      <button type="submit" disabled={saving}
+                        className="px-4 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                        + Tópico
+                      </button>
+                    </form>
+
                     {s.topics.map(t => (
                       <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-5">
                         {/* Header tópico */}
@@ -513,19 +526,6 @@ export default function MateriasPage() {
                         </div>
                       </div>
                     ))}
-
-                    {/* Novo tópico */}
-                    <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
-                      <input
-                        value={topicSubjectId === s.id ? topicName : ""}
-                        onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }}
-                        placeholder="Novo tópico" required
-                        className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                      <button type="submit" disabled={saving}
-                        className="px-4 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                        + Tópico
-                      </button>
-                    </form>
                   </div>
                 )}
               </div>
