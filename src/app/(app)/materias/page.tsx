@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Plus, ChevronDown, ChevronUp, BookOpen, Trash2, Pencil, Check, X, Clock, FileText, TrendingUp, RotateCcw } from "lucide-react";
 
 interface Pdf {
@@ -15,6 +15,163 @@ interface Subject {
   topics: Topic[];
 }
 
+// ── PdfProgress fora do componente pai para evitar re-render ──
+interface PdfProgressProps {
+  pdf: Pdf;
+  editingPdf: string | null;
+  editPdfData: { title: string; totalPages: number; lastPageStudied: number; studyHours: number; questions: number; correctQuestions: number; completed: boolean; };
+  saving: boolean;
+  onEdit: (pdf: Pdf) => void;
+  onToggleCompleted: (pdf: Pdf) => void;
+  onDelete: (id: string) => void;
+  onSave: (id: string) => void;
+  onCancel: () => void;
+  onChangeEditData: (field: string, value: any) => void;
+}
+
+function PdfProgress({ pdf, editingPdf, editPdfData, saving, onEdit, onToggleCompleted, onDelete, onSave, onCancel, onChangeEditData }: PdfProgressProps) {
+  const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
+  const accuracy = pdf.questions > 0 ? Math.round((pdf.correctQuestions / pdf.questions) * 100) : null;
+  const status = pdf.completed ? "concluido" : pdf.lastPageStudied > 0 ? "andamento" : "nao_iniciado";
+  const isEditing = editingPdf === pdf.id;
+
+  return (
+    <div className={`rounded-xl border p-3 ${pdf.completed ? "bg-green-50 border-green-200" : pdf.lastPageStudied > 0 ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="text-base shrink-0">
+            {status === "concluido" ? "✅" : status === "andamento" ? "🔵" : "⭕"}
+          </span>
+          <p className="text-sm font-medium text-gray-900 truncate">{pdf.title}</p>
+        </div>
+        {!isEditing && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={() => onEdit(pdf)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-white rounded transition-colors" title="Editar">
+              <Pencil className="w-3 h-3"/>
+            </button>
+            <button onClick={() => onToggleCompleted(pdf)}
+              className={`p-1 rounded transition-colors hover:bg-white ${pdf.completed ? "text-yellow-500 hover:text-yellow-700" : "text-gray-400 hover:text-green-600"}`}
+              title={pdf.completed ? "Desmarcar concluído" : "Marcar como concluído"}>
+              <RotateCcw className="w-3 h-3"/>
+            </button>
+            <button onClick={() => onDelete(pdf.id)} className="p-1 text-gray-400 hover:text-red-500 hover:bg-white rounded transition-colors" title="Excluir">
+              <Trash2 className="w-3 h-3"/>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {!isEditing && pdf.totalPages > 0 && (
+        <div className="mt-2">
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>Página {pdf.lastPageStudied} de {pdf.totalPages}</span>
+            <span>{pct}%</span>
+          </div>
+          <div className="h-1.5 bg-white rounded-full overflow-hidden border border-gray-200">
+            <div className={`h-full rounded-full transition-all ${pdf.completed ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${pct}%` }}/>
+          </div>
+        </div>
+      )}
+
+      {!isEditing && (pdf.studyHours > 0 || pdf.questions > 0) && (
+        <div className="flex items-center gap-3 mt-2">
+          {pdf.studyHours > 0 && (
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <Clock className="w-3 h-3"/>{pdf.studyHours.toFixed(1)}h
+            </span>
+          )}
+          {pdf.questions > 0 && (
+            <span className="flex items-center gap-1 text-xs text-gray-500">
+              <FileText className="w-3 h-3"/>{pdf.questions} questões
+            </span>
+          )}
+          {accuracy !== null && (
+            <span className={`flex items-center gap-1 text-xs font-medium ${accuracy >= 70 ? "text-green-600" : accuracy >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+              <TrendingUp className="w-3 h-3"/>{accuracy}% acerto
+            </span>
+          )}
+        </div>
+      )}
+
+      {isEditing && (
+        <div className="mt-3 space-y-3 bg-white rounded-lg p-3 border border-gray-200">
+          <div>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Título</label>
+            <input
+              value={editPdfData.title}
+              onChange={e => onChangeEditData("title", e.target.value)}
+              className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total de páginas</label>
+              <input type="number" min="0"
+                value={editPdfData.totalPages}
+                onChange={e => onChangeEditData("totalPages", +e.target.value)}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Última página lida</label>
+              <input type="number" min="0"
+                value={editPdfData.lastPageStudied}
+                onChange={e => onChangeEditData("lastPageStudied", +e.target.value)}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas estudadas</label>
+              <input type="number" min="0" step="0.1"
+                value={editPdfData.studyHours}
+                onChange={e => onChangeEditData("studyHours", +e.target.value)}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Questões feitas</label>
+              <input type="number" min="0"
+                value={editPdfData.questions}
+                onChange={e => onChangeEditData("questions", +e.target.value)}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Acertos</label>
+              <input type="number" min="0"
+                value={editPdfData.correctQuestions}
+                onChange={e => onChangeEditData("correctQuestions", +e.target.value)}
+                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            </div>
+            <div className="flex items-end pb-1">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox"
+                  checked={editPdfData.completed}
+                  onChange={e => onChangeEditData("completed", e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300"
+                />
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Concluído</span>
+              </label>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => onSave(pdf.id)} disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
+              <Check className="w-3.5 h-3.5"/> Salvar
+            </button>
+            <button onClick={onCancel}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium transition-colors">
+              <X className="w-3.5 h-3.5"/> Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Componente principal ──
 export default function MateriasPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -32,8 +189,11 @@ export default function MateriasPage() {
     studyHours: 0, questions: 0, correctQuestions: 0, completed: false,
   });
 
-  const load = () => fetch("/api/subjects").then(r => r.json()).then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? []))).catch(console.error);
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => {
+    fetch("/api/subjects").then(r => r.json()).then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? []))).catch(console.error);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const addSubject = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError("");
@@ -82,133 +242,13 @@ export default function MateriasPage() {
     await fetch(`/api/pdfs/${pdf.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: !pdf.completed }) });
     load();
   };
-
-  function PdfProgress({ pdf }: { pdf: Pdf }) {
-    const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
-    const accuracy = pdf.questions > 0 ? Math.round((pdf.correctQuestions / pdf.questions) * 100) : null;
-    const status = pdf.completed ? "concluido" : pdf.lastPageStudied > 0 ? "andamento" : "nao_iniciado";
-    const isEditing = editingPdf === pdf.id;
-
-    return (
-      <div className={`rounded-xl border p-3 ${pdf.completed ? "bg-green-50 border-green-200" : pdf.lastPageStudied > 0 ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}>
-        {/* Header do PDF */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 min-w-0">
-            <span className="text-base shrink-0">
-              {status === "concluido" ? "✅" : status === "andamento" ? "🔵" : "⭕"}
-            </span>
-            <p className="text-sm font-medium text-gray-900 truncate">{pdf.title}</p>
-          </div>
-          {!isEditing && (
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => { setEditingPdf(pdf.id); setEditPdfData({ title: pdf.title, totalPages: pdf.totalPages, lastPageStudied: pdf.lastPageStudied, studyHours: pdf.studyHours, questions: pdf.questions, correctQuestions: pdf.correctQuestions, completed: pdf.completed }); }}
-                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-white rounded transition-colors" title="Editar">
-                <Pencil className="w-3 h-3"/>
-              </button>
-              <button onClick={() => toggleCompleted(pdf)}
-                className={`p-1 rounded transition-colors hover:bg-white ${pdf.completed ? "text-yellow-500 hover:text-yellow-700" : "text-gray-400 hover:text-green-600"}`}
-                title={pdf.completed ? "Desmarcar concluído" : "Marcar como concluído"}>
-                <RotateCcw className="w-3 h-3"/>
-              </button>
-              <button onClick={() => deletePdf(pdf.id)} className="p-1 text-gray-400 hover:text-red-500 hover:bg-white rounded transition-colors" title="Excluir">
-                <Trash2 className="w-3 h-3"/>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Barra de progresso */}
-        {!isEditing && pdf.totalPages > 0 && (
-          <div className="mt-2">
-            <div className="flex justify-between text-xs text-gray-500 mb-1">
-              <span>Página {pdf.lastPageStudied} de {pdf.totalPages}</span>
-              <span>{pct}%</span>
-            </div>
-            <div className="h-1.5 bg-white rounded-full overflow-hidden border border-gray-200">
-              <div className={`h-full rounded-full transition-all ${pdf.completed ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${pct}%` }}/>
-            </div>
-          </div>
-        )}
-
-        {/* Stats */}
-        {!isEditing && (pdf.studyHours > 0 || pdf.questions > 0) && (
-          <div className="flex items-center gap-3 mt-2">
-            {pdf.studyHours > 0 && (
-              <span className="flex items-center gap-1 text-xs text-gray-500">
-                <Clock className="w-3 h-3"/>{pdf.studyHours.toFixed(1)}h
-              </span>
-            )}
-            {pdf.questions > 0 && (
-              <span className="flex items-center gap-1 text-xs text-gray-500">
-                <FileText className="w-3 h-3"/>{pdf.questions} questões
-              </span>
-            )}
-            {accuracy !== null && (
-              <span className={`flex items-center gap-1 text-xs font-medium ${accuracy >= 70 ? "text-green-600" : accuracy >= 50 ? "text-yellow-600" : "text-red-600"}`}>
-                <TrendingUp className="w-3 h-3"/>{accuracy}% acerto
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Formulário de edição completo */}
-        {isEditing && (
-          <div className="mt-3 space-y-3 bg-white rounded-lg p-3 border border-gray-200">
-            <div>
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Título</label>
-              <input value={editPdfData.title} onChange={e => setEditPdfData(d => ({ ...d, title: e.target.value }))}
-                className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total de páginas</label>
-                <input type="number" min="0" value={editPdfData.totalPages} onChange={e => setEditPdfData(d => ({ ...d, totalPages: +e.target.value }))}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Última página lida</label>
-                <input type="number" min="0" value={editPdfData.lastPageStudied} onChange={e => setEditPdfData(d => ({ ...d, lastPageStudied: +e.target.value }))}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Horas estudadas</label>
-                <input type="number" min="0" step="0.1" value={editPdfData.studyHours} onChange={e => setEditPdfData(d => ({ ...d, studyHours: +e.target.value }))}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Questões feitas</label>
-                <input type="number" min="0" value={editPdfData.questions} onChange={e => setEditPdfData(d => ({ ...d, questions: +e.target.value }))}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Acertos</label>
-                <input type="number" min="0" value={editPdfData.correctQuestions} onChange={e => setEditPdfData(d => ({ ...d, correctQuestions: +e.target.value }))}
-                  className="w-full mt-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 cursor-pointer mt-1">
-                  <input type="checkbox" checked={editPdfData.completed} onChange={e => setEditPdfData(d => ({ ...d, completed: e.target.checked }))}
-                    className="w-4 h-4 rounded border-gray-300 text-gray-900 focus:ring-gray-900"/>
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Concluído</span>
-                </label>
-              </div>
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => savePdf(pdf.id)} disabled={saving}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-900 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50">
-                <Check className="w-3.5 h-3.5"/> Salvar
-              </button>
-              <button onClick={() => setEditingPdf(null)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium transition-colors">
-                <X className="w-3.5 h-3.5"/> Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const handleEditPdf = (pdf: Pdf) => {
+    setEditingPdf(pdf.id);
+    setEditPdfData({ title: pdf.title, totalPages: pdf.totalPages, lastPageStudied: pdf.lastPageStudied, studyHours: pdf.studyHours, questions: pdf.questions, correctQuestions: pdf.correctQuestions, completed: pdf.completed });
+  };
+  const handleChangeEditData = useCallback((field: string, value: any) => {
+    setEditPdfData(d => ({ ...d, [field]: value }));
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -324,7 +364,21 @@ export default function MateriasPage() {
                           )}
                         </div>
                         <div className="space-y-2">
-                          {t.pdfs.map(p => <PdfProgress key={p.id} pdf={p}/>)}
+                          {t.pdfs.map(p => (
+                            <PdfProgress
+                              key={p.id}
+                              pdf={p}
+                              editingPdf={editingPdf}
+                              editPdfData={editPdfData}
+                              saving={saving}
+                              onEdit={handleEditPdf}
+                              onToggleCompleted={toggleCompleted}
+                              onDelete={deletePdf}
+                              onSave={savePdf}
+                              onCancel={() => setEditingPdf(null)}
+                              onChangeEditData={handleChangeEditData}
+                            />
+                          ))}
                         </div>
                       </div>
                     ))}
