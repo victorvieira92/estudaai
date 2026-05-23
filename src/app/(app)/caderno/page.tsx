@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, CheckCircle, XCircle, Brain } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Brain, Pencil, Trash2, X, Check } from "lucide-react";
 
 interface Subject { id: string; name: string; }
 interface ErrorNote {
@@ -11,13 +11,13 @@ interface ErrorNote {
 }
 
 const ERROR_TYPES = [
-  { value: "desatencao",         label: "Desatenção",            desc: "Leu errado ou marcou sem pensar",           emoji: "😵" },
-  { value: "nao_estudei",        label: "Não estudei",           desc: "Conteúdo ainda não visto",                  emoji: "📚" },
-  { value: "nao_lembrei",        label: "Não lembrei",           desc: "Estudou mas esqueceu na hora",              emoji: "🧠" },
-  { value: "confundi_conceitos", label: "Confundi conceitos",    desc: "Misturou dois assuntos parecidos",          emoji: "🔀" },
-  { value: "interpretacao",      label: "Erro de interpretação", desc: "Entendeu o enunciado de forma errada",      emoji: "📖" },
-  { value: "pegadinha",          label: "Pegadinha",             desc: "Questão com detalhe que induziu ao erro",   emoji: "🪤" },
-  { value: "outro",              label: "Outro",                 desc: "Motivo diferente dos acima",                emoji: "❓" },
+  { value: "desatencao",         label: "Desatenção",            desc: "Leu errado ou marcou sem pensar",         emoji: "😵" },
+  { value: "nao_estudei",        label: "Não estudei",           desc: "Conteúdo ainda não visto",                emoji: "📚" },
+  { value: "nao_lembrei",        label: "Não lembrei",           desc: "Estudou mas esqueceu na hora",            emoji: "🧠" },
+  { value: "confundi_conceitos", label: "Confundi conceitos",    desc: "Misturou dois assuntos parecidos",        emoji: "🔀" },
+  { value: "interpretacao",      label: "Erro de interpretação", desc: "Entendeu o enunciado de forma errada",    emoji: "📖" },
+  { value: "pegadinha",          label: "Pegadinha",             desc: "Questão com detalhe que induziu ao erro", emoji: "🪤" },
+  { value: "outro",              label: "Outro",                 desc: "Motivo diferente dos acima",              emoji: "❓" },
 ];
 
 function errorTypeLabel(value: string | null) {
@@ -29,6 +29,8 @@ export default function CadernoPage() {
   const [notes, setNotes] = useState<ErrorNote[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [filter, setFilter] = useState<"all" | "pending" | "resolved">("pending");
+
+  // Novo erro
   const [subjectId, setSubjectId] = useState("");
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -37,6 +39,19 @@ export default function CadernoPage() {
   const [difficulty, setDifficulty] = useState("Media");
   const [errorType, setErrorType] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Edição
+  const [editingNote, setEditingNote] = useState<ErrorNote | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editTopic, setEditTopic] = useState("");
+  const [editBanca, setEditBanca] = useState("");
+  const [editDifficulty, setEditDifficulty] = useState("Media");
+  const [editErrorType, setEditErrorType] = useState("");
+  const [editSubjectId, setEditSubjectId] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Flashcard
   const [creatingFlashcard, setCreatingFlashcard] = useState<string | null>(null);
   const [flashcardSuccess, setFlashcardSuccess] = useState<string | null>(null);
 
@@ -66,6 +81,33 @@ export default function CadernoPage() {
     load();
   };
 
+  const deleteNote = async (id: string) => {
+    if (!confirm("Excluir este erro?")) return;
+    await fetch(`/api/error-notes/${id}`, { method: "DELETE" });
+    load();
+  };
+
+  const startEdit = (n: ErrorNote) => {
+    setEditingNote(n);
+    setEditTitle(n.title);
+    setEditDesc(n.description);
+    setEditTopic(n.topic ?? "");
+    setEditBanca(n.banca ?? "");
+    setEditDifficulty(n.difficulty);
+    setEditErrorType(n.errorType ?? "");
+    setEditSubjectId(n.subjectId);
+  };
+
+  const saveEdit = async () => {
+    if (!editingNote) return;
+    setSavingEdit(true);
+    await fetch(`/api/error-notes/${editingNote.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: editTitle, description: editDesc, topic: editTopic, banca: editBanca, difficulty: editDifficulty, errorType: editErrorType || null, subjectId: editSubjectId }),
+    });
+    setEditingNote(null); setSavingEdit(false); load();
+  };
+
   const createFlashcard = async (note: ErrorNote) => {
     setCreatingFlashcard(note.id);
     const res = await fetch("/api/flashcards", {
@@ -93,7 +135,72 @@ export default function CadernoPage() {
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+      {/* Modal de edição */}
+      {editingNote && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-bold">Editar erro</h2>
+              <button onClick={() => setEditingNote(null)} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg"><X className="w-5 h-5"/></button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Disciplina</label>
+                <select value={editSubjectId} onChange={e => setEditSubjectId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Dificuldade</label>
+                <select value={editDifficulty} onChange={e => setEditDifficulty(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  {["Baixa", "Media", "Alta"].map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Motivo do erro</label>
+              <select value={editErrorType} onChange={e => setEditErrorType(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                <option value="">Selecione o motivo</option>
+                {ERROR_TYPES.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título</label>
+              <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Explicação</label>
+              <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={4}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"/>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tema</label>
+                <input value={editTopic} onChange={e => setEditTopic(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Banca</label>
+                <input value={editBanca} onChange={e => setEditBanca(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={saveEdit} disabled={savingEdit}
+                className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
+                <Check className="w-4 h-4"/>{savingEdit ? "Salvando..." : "Salvar"}
+              </button>
+              <button onClick={() => setEditingNote(null)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="px-8 py-8 space-y-6">
         {/* KPIs */}
         <div className="grid grid-cols-4 gap-4">
           {[
@@ -109,9 +216,8 @@ export default function CadernoPage() {
           ))}
         </div>
 
-        {/* Formulário + Tipos de erro lado a lado */}
+        {/* Formulário + Tipos de erro */}
         <div className="grid grid-cols-3 gap-6">
-          {/* Formulário — ocupa 2/3 */}
           <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
             <h2 className="text-lg font-semibold mb-4">Registrar novo erro</h2>
             <form onSubmit={add} className="space-y-4">
@@ -132,7 +238,6 @@ export default function CadernoPage() {
                   </select>
                 </div>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Motivo do erro</label>
                 <select value={errorType} onChange={e => setErrorType(e.target.value)}
@@ -141,21 +246,17 @@ export default function CadernoPage() {
                   {ERROR_TYPES.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título *</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} required
-                  placeholder="Ex: O que é despesa antecipada?"
+                <input value={title} onChange={e => setTitle(e.target.value)} required placeholder="Ex: O que é despesa antecipada?"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Por que errei / Explicação *</label>
                 <textarea value={desc} onChange={e => setDesc(e.target.value)} required rows={4}
                   placeholder="Explique o conceito correto, o que confundiu, como lembrar..."
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 resize-none"/>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 {[["Tema", topic, setTopic, "Ex: CPC 27"], ["Banca", banca, setBanca, "Ex: FGV"]].map(([l, v, s, p]: any) => (
                   <div key={l}>
@@ -165,22 +266,18 @@ export default function CadernoPage() {
                   </div>
                 ))}
               </div>
-
               <button type="submit" disabled={saving}
                 className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
                 <Plus className="w-4 h-4"/>Registrar erro
               </button>
             </form>
           </div>
-
-          {/* Tipos de erro — ocupa 1/3 */}
           <div className="col-span-1 bg-white rounded-2xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-1">Tipos de erro</h2>
-            <p className="text-xs text-gray-400 mb-3">Identificar o motivo ajuda a corrigir padrões.</p>
+            <p className="text-xs text-gray-400 mb-3">Clique para selecionar o motivo.</p>
             <div className="space-y-2">
               {ERROR_TYPES.map(t => (
-                <button key={t.value} type="button"
-                  onClick={() => setErrorType(t.value)}
+                <button key={t.value} type="button" onClick={() => setErrorType(t.value)}
                   className={`w-full flex items-start gap-2 p-2.5 rounded-xl text-left transition-colors border ${errorType === t.value ? "border-gray-900 bg-gray-50" : "border-gray-100 bg-gray-50 hover:border-gray-300"}`}>
                   <span className="text-base shrink-0">{t.emoji}</span>
                   <div>
@@ -235,15 +332,25 @@ export default function CadernoPage() {
                         </button>
                       </div>
                     )}
-                    {flashcardSuccess === n.id ? (
-                      <span className="text-xs text-green-600 font-medium">✓ Flashcard criado!</span>
-                    ) : (
-                      <button onClick={() => createFlashcard(n)} disabled={creatingFlashcard === n.id}
-                        className="flex items-center gap-1.5 px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
-                        <Brain className="w-3.5 h-3.5"/>
-                        {creatingFlashcard === n.id ? "Criando..." : "→ Flashcard"}
+                    <div className="flex gap-2">
+                      {flashcardSuccess === n.id ? (
+                        <span className="text-xs text-green-600 font-medium self-center">✓ Criado!</span>
+                      ) : (
+                        <button onClick={() => createFlashcard(n)} disabled={creatingFlashcard === n.id}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-lg text-xs font-medium transition-colors disabled:opacity-50">
+                          <Brain className="w-3.5 h-3.5"/>
+                          {creatingFlashcard === n.id ? "Criando..." : "→ Flashcard"}
+                        </button>
+                      )}
+                      <button onClick={() => startEdit(n)}
+                        className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                        <Pencil className="w-4 h-4"/>
                       </button>
-                    )}
+                      <button onClick={() => deleteNote(n.id)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <Trash2 className="w-4 h-4"/>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
