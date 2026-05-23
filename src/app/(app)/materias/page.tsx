@@ -300,6 +300,7 @@ export default function MateriasPage() {
   const [topicName, setTopicName] = useState(""); const [topicSubjectId, setTopicSubjectId] = useState("");
   const [pdfTitle, setPdfTitle] = useState(""); const [pdfTopicId, setPdfTopicId] = useState(""); const [pdfPages, setPdfPages] = useState("0");
   const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  const [recalculating, setRecalculating] = useState(false); const [recalcDone, setRecalcDone] = useState(false);
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
   const [editSubjectData, setEditSubjectData] = useState({ name: "", editalWeight: 5, criticality: 5 });
   const [editingTopic, setEditingTopic] = useState<string | null>(null);
@@ -345,6 +346,15 @@ export default function MateriasPage() {
     setPdfTitle(""); load(); setSaving(false);
   };
 
+  const recalc = async () => {
+    setRecalculating(true);
+    await fetch("/api/recalc", { method: "POST" });
+    setRecalcDone(true);
+    load();
+    setRecalculating(false);
+    setTimeout(() => setRecalcDone(false), 3000);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-gray-950 text-white px-8 py-8">
@@ -354,7 +364,9 @@ export default function MateriasPage() {
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
         {/* Nova matéria */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-4">Nova matéria</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Nova matéria</h2>
+          </div>
           <form onSubmit={addSubject} className="space-y-4">
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Direito Constitucional" required
               className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
@@ -368,10 +380,17 @@ export default function MateriasPage() {
               ))}
             </div>
             {error && <p className="text-red-600 text-sm">{error}</p>}
-            <button type="submit" disabled={saving}
-              className="flex items-center gap-2 px-5 py-3 bg-gray-900 hover:bg-gray-700 text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-50">
-              <Plus className="w-4 h-4"/>Adicionar matéria
-            </button>
+            <div className="flex items-center justify-between">
+              <button type="submit" disabled={saving}
+                className="flex items-center gap-2 px-5 py-3 bg-gray-900 hover:bg-gray-700 text-white font-bold rounded-xl text-sm transition-colors disabled:opacity-50">
+                <Plus className="w-4 h-4"/>Adicionar matéria
+              </button>
+              <button type="button" onClick={recalc} disabled={recalculating}
+                className={`flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 ${recalcDone ? "bg-green-700 text-white" : "bg-green-600 hover:bg-green-500 text-white"}`}>
+                <RotateCcw className={`w-4 h-4 ${recalculating ? "animate-spin" : ""}`}/>
+                {recalculating ? "Recalculando..." : recalcDone ? "✓ Corrigido!" : "Recalcular métricas"}
+              </button>
+            </div>
           </form>
         </div>
 
