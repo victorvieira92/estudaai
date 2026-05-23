@@ -1,10 +1,19 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Plus, ChevronDown, ChevronUp, BookOpen, Trash2, Pencil, Check, X } from "lucide-react";
+import { Plus, ChevronDown, ChevronUp, BookOpen, Trash2, Pencil, Check, X, Clock, FileText, TrendingUp } from "lucide-react";
 
-interface Pdf { id: string; title: string; completed: boolean; totalPages: number; }
+interface Pdf {
+  id: string; title: string; completed: boolean;
+  totalPages: number; lastPageStudied: number; studyHours: number;
+  questions: number; correctQuestions: number;
+}
 interface Topic { id: string; name: string; pdfs: Pdf[]; }
-interface Subject { id: string; name: string; editalWeight: number; criticality: number; studyHours: number; totalQuestions: number; correctQuestions: number; topics: Topic[]; }
+interface Subject {
+  id: string; name: string; editalWeight: number; criticality: number;
+  studyHours: number; totalQuestions: number; correctQuestions: number;
+  completedPdfs: number; totalPdfs: number; progress: number;
+  topics: Topic[];
+}
 
 export default function MateriasPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -36,8 +45,7 @@ export default function MateriasPage() {
   };
   const deleteSubject = async (id: string) => {
     if (!confirm("Excluir esta matéria e todos os seus tópicos e PDFs?")) return;
-    await fetch(`/api/subjects/${id}`, { method: "DELETE" });
-    load();
+    await fetch(`/api/subjects/${id}`, { method: "DELETE" }); load();
   };
   const addTopic = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
@@ -68,130 +76,227 @@ export default function MateriasPage() {
     await fetch(`/api/pdfs/${id}`, { method: "DELETE" }); load();
   };
 
+  function PdfProgress({ pdf }: { pdf: Pdf }) {
+    const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
+    const accuracy = pdf.questions > 0 ? Math.round((pdf.correctQuestions / pdf.questions) * 100) : null;
+    const status = pdf.completed ? "concluido" : pdf.lastPageStudied > 0 ? "andamento" : "nao_iniciado";
+
+    return (
+      <div className={`rounded-xl border p-3 ${pdf.completed ? "bg-green-50 border-green-200" : pdf.lastPageStudied > 0 ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-base shrink-0">
+              {status === "concluido" ? "✅" : status === "andamento" ? "🔵" : "⭕"}
+            </span>
+            {editingPdf === pdf.id ? (
+              <div className="flex items-center gap-2 flex-1">
+                <input value={editPdfData.title} onChange={e => setEditPdfData(d => ({ ...d, title: e.target.value }))}
+                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"/>
+                <input type="number" value={editPdfData.totalPages} onChange={e => setEditPdfData(d => ({ ...d, totalPages: +e.target.value }))}
+                  className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white" placeholder="Págs"/>
+                <button onClick={() => savePdf(pdf.id)} className="p-1 text-green-600 hover:bg-green-100 rounded"><Check className="w-3.5 h-3.5"/></button>
+                <button onClick={() => setEditingPdf(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5"/></button>
+              </div>
+            ) : (
+              <p className="text-sm font-medium text-gray-900 truncate">{pdf.title}</p>
+            )}
+          </div>
+          {editingPdf !== pdf.id && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => { setEditingPdf(pdf.id); setEditPdfData({ title: pdf.title, totalPages: pdf.totalPages }); }}
+                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-white rounded transition-colors"><Pencil className="w-3 h-3"/></button>
+              <button onClick={() => deletePdf(pdf.id)}
+                className="p-1 text-gray-400 hover:text-red-500 hover:bg-white rounded transition-colors"><Trash2 className="w-3 h-3"/></button>
+            </div>
+          )}
+        </div>
+
+        {/* Barra de progresso */}
+        {pdf.totalPages > 0 && editingPdf !== pdf.id && (
+          <div className="mt-2">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Página {pdf.lastPageStudied} de {pdf.totalPages}</span>
+              <span>{pct}%</span>
+            </div>
+            <div className="h-1.5 bg-white rounded-full overflow-hidden border border-gray-200">
+              <div className={`h-full rounded-full transition-all ${pdf.completed ? "bg-green-500" : "bg-blue-500"}`} style={{ width: `${pct}%` }}/>
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        {editingPdf !== pdf.id && (pdf.studyHours > 0 || pdf.questions > 0) && (
+          <div className="flex items-center gap-3 mt-2">
+            {pdf.studyHours > 0 && (
+              <span className="flex items-center gap-1 text-xs text-gray-500">
+                <Clock className="w-3 h-3"/>{pdf.studyHours.toFixed(1)}h
+              </span>
+            )}
+            {pdf.questions > 0 && (
+              <span className="flex items-center gap-1 text-xs text-gray-500">
+                <FileText className="w-3 h-3"/>{pdf.questions} questões
+              </span>
+            )}
+            {accuracy !== null && (
+              <span className={`flex items-center gap-1 text-xs font-medium ${accuracy >= 70 ? "text-green-600" : accuracy >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+                <TrendingUp className="w-3 h-3"/>{accuracy}% acerto
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-gray-950 text-white px-8 py-8">
         <h1 className="text-3xl font-bold">Matérias</h1>
         <p className="text-gray-400 text-sm mt-1">Cadastre disciplinas, tópicos e PDFs do edital.</p>
       </div>
+
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-6">
+        {/* Nova matéria */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold mb-4">Nova matéria</h2>
           <form onSubmit={addSubject} className="space-y-4">
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Direito Constitucional" required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Direito Constitucional" required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
             <div className="grid grid-cols-2 gap-4">
               {[["Peso no edital (1-10)", ew, setEw], ["Criticidade (1-10)", crit, setCrit]].map(([l, v, s]: any) => (
                 <div key={l}>
                   <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">{l}</label>
-                  <input type="number" min="1" max="10" value={v} onChange={e => s(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                  <input type="number" min="1" max="10" value={v} onChange={e => s(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
                 </div>
               ))}
             </div>
             {error && <p className="text-red-600 text-sm">{error}</p>}
-            <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
+            <button type="submit" disabled={saving}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50">
               <Plus className="w-4 h-4"/>Adicionar matéria
             </button>
           </form>
         </div>
 
+        {/* Lista */}
         <div className="space-y-3">
-          {subjects.map(s => (
-            <div key={s.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              {editingSubject === s.id ? (
-                <div className="flex items-center gap-3 px-6 py-4 bg-blue-50 border-b border-blue-100">
-                  <input value={editSubjectData.name} onChange={e => setEditSubjectData(d => ({ ...d, name: e.target.value }))} className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <span>Peso</span>
-                    <input type="number" min="1" max="10" value={editSubjectData.editalWeight} onChange={e => setEditSubjectData(d => ({ ...d, editalWeight: +e.target.value }))} className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                    <span>Crit</span>
-                    <input type="number" min="1" max="10" value={editSubjectData.criticality} onChange={e => setEditSubjectData(d => ({ ...d, criticality: +e.target.value }))} className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                  </div>
-                  <button onClick={() => saveSubject(s.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><Check className="w-4 h-4"/></button>
-                  <button onClick={() => setEditingSubject(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4"/></button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
-                  <button onClick={() => setExpanded(expanded === s.id ? null : s.id)} className="flex items-center gap-3 flex-1 text-left">
-                    <BookOpen className="w-5 h-5 text-gray-400"/>
-                    <div>
-                      <p className="font-semibold text-gray-900">{s.name}</p>
-                      <p className="text-xs text-gray-500">{s.topics.length} tópico(s) • {s.studyHours.toFixed(1)}h estudadas • {s.totalQuestions} questões</p>
+          {subjects.map(s => {
+            const accuracy = s.totalQuestions > 0 ? Math.round((s.correctQuestions / s.totalQuestions) * 100) : null;
+            return (
+              <div key={s.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {/* Header matéria */}
+                {editingSubject === s.id ? (
+                  <div className="flex items-center gap-3 px-6 py-4 bg-blue-50 border-b border-blue-100">
+                    <input value={editSubjectData.name} onChange={e => setEditSubjectData(d => ({ ...d, name: e.target.value }))}
+                      className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+                      <span>Peso</span>
+                      <input type="number" min="1" max="10" value={editSubjectData.editalWeight}
+                        onChange={e => setEditSubjectData(d => ({ ...d, editalWeight: +e.target.value }))}
+                        className="w-14 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                      <span>Crit</span>
+                      <input type="number" min="1" max="10" value={editSubjectData.criticality}
+                        onChange={e => setEditSubjectData(d => ({ ...d, criticality: +e.target.value }))}
+                        className="w-14 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
                     </div>
-                  </button>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-gray-500 mr-3">Peso: {s.editalWeight}/10 • Crit: {s.criticality}/10</span>
-                    <button onClick={() => { setEditingSubject(s.id); setEditSubjectData({ name: s.name, editalWeight: s.editalWeight, criticality: s.criticality }); setExpanded(s.id); }} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3.5 h-3.5"/></button>
-                    <button onClick={() => deleteSubject(s.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5"/></button>
-                    <button onClick={() => setExpanded(expanded === s.id ? null : s.id)} className="p-1.5 text-gray-400">{expanded === s.id ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</button>
+                    <button onClick={() => saveSubject(s.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><Check className="w-4 h-4"/></button>
+                    <button onClick={() => setEditingSubject(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4"/></button>
                   </div>
-                </div>
-              )}
-
-              {expanded === s.id && (
-                <div className="border-t border-gray-100 px-6 py-4 space-y-4 bg-gray-50">
-                  {s.topics.map(t => (
-                    <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        {editingTopic === t.id ? (
-                          <div className="flex items-center gap-2 flex-1">
-                            <input value={editTopicName} onChange={e => setEditTopicName(e.target.value)} className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                            <button onClick={() => saveTopic(t.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"><Check className="w-4 h-4"/></button>
-                            <button onClick={() => setEditingTopic(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4"/></button>
+                ) : (
+                  <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors">
+                    <button onClick={() => setExpanded(expanded === s.id ? null : s.id)} className="flex items-center gap-3 flex-1 text-left">
+                      <BookOpen className="w-5 h-5 text-gray-400 shrink-0"/>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-900">{s.name}</p>
+                          {s.totalPdfs > 0 && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${s.completedPdfs === s.totalPdfs ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
+                              {s.completedPdfs}/{s.totalPdfs} PDFs
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <p className="text-xs text-gray-500">{s.studyHours.toFixed(1)}h estudadas</p>
+                          {accuracy !== null && <p className={`text-xs font-medium ${accuracy >= 70 ? "text-green-600" : accuracy >= 50 ? "text-yellow-600" : "text-red-600"}`}>{accuracy}% acerto</p>}
+                          <p className="text-xs text-gray-400">Peso: {s.editalWeight}/10 · Crit: {s.criticality}/10</p>
+                        </div>
+                        {/* Barra de progresso geral */}
+                        {s.totalPdfs > 0 && (
+                          <div className="mt-1.5 h-1 bg-gray-100 rounded-full overflow-hidden w-48">
+                            <div className="h-full bg-gray-900 rounded-full transition-all" style={{ width: `${s.progress}%` }}/>
                           </div>
-                        ) : (
-                          <>
-                            <p className="font-medium text-sm">{t.name}</p>
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => { setEditingTopic(t.id); setEditTopicName(t.name); }} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3 h-3"/></button>
-                              <button onClick={() => deleteTopic(t.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3 h-3"/></button>
-                            </div>
-                          </>
                         )}
                       </div>
-                      <div className="space-y-1.5 pl-2">
-                        {t.pdfs.map(p => (
-                          <div key={p.id} className="flex items-center gap-2">
-                            {editingPdf === p.id ? (
-                              <div className="flex items-center gap-2 flex-1">
-                                <input value={editPdfData.title} onChange={e => setEditPdfData(d => ({ ...d, title: e.target.value }))} className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                                <input type="number" value={editPdfData.totalPages} onChange={e => setEditPdfData(d => ({ ...d, totalPages: +e.target.value }))} className="w-16 border border-gray-300 rounded-lg px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                                <button onClick={() => savePdf(p.id)} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3.5 h-3.5"/></button>
-                                <button onClick={() => setEditingPdf(null)} className="p-1 text-gray-400 hover:bg-gray-100 rounded"><X className="w-3.5 h-3.5"/></button>
-                              </div>
-                            ) : (
-                              <>
-                                <span className={`w-2 h-2 rounded-full shrink-0 ${p.completed ? "bg-green-500" : "bg-gray-300"}`}/>
-                                <span className="text-xs text-gray-600 flex-1">{p.title} {p.totalPages > 0 && `(${p.totalPages}p)`} {p.completed && "✓"}</span>
-                                <button onClick={() => { setEditingPdf(p.id); setEditPdfData({ title: p.title, totalPages: p.totalPages }); }} className="p-1 text-gray-300 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"><Pencil className="w-3 h-3"/></button>
-                                <button onClick={() => deletePdf(p.id)} className="p-1 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-3 h-3"/></button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    </button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => { setEditingSubject(s.id); setEditSubjectData({ name: s.name, editalWeight: s.editalWeight, criticality: s.criticality }); setExpanded(s.id); }}
+                        className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3.5 h-3.5"/></button>
+                      <button onClick={() => deleteSubject(s.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={() => setExpanded(expanded === s.id ? null : s.id)} className="p-1.5 text-gray-400">
+                        {expanded === s.id ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                      </button>
                     </div>
-                  ))}
+                  </div>
+                )}
 
-                  <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
-                    <input value={topicSubjectId === s.id ? topicName : ""} onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }} placeholder="Novo tópico (ex: CPC 00)" required className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                    <button type="submit" disabled={saving} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium disabled:opacity-50">+ Tópico</button>
-                  </form>
+                {expanded === s.id && (
+                  <div className="border-t border-gray-100 px-6 py-4 space-y-4 bg-gray-50">
+                    {s.topics.map(t => (
+                      <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          {editingTopic === t.id ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <input value={editTopicName} onChange={e => setEditTopicName(e.target.value)}
+                                className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                              <button onClick={() => saveTopic(t.id)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"><Check className="w-4 h-4"/></button>
+                              <button onClick={() => setEditingTopic(null)} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4"/></button>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="font-medium text-sm text-gray-800">{t.name}</p>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => { setEditingTopic(t.id); setEditTopicName(t.name); }}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3 h-3"/></button>
+                                <button onClick={() => deleteTopic(t.id)}
+                                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3 h-3"/></button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          {t.pdfs.map(p => <PdfProgress key={p.id} pdf={p}/>)}
+                        </div>
+                      </div>
+                    ))}
 
-                  {s.topics.length > 0 && (
-                    <form onSubmit={addPdf} className="flex gap-2 flex-wrap">
-                      <select value={pdfTopicId} onChange={e => setPdfTopicId(e.target.value)} required className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                        <option value="">Tópico</option>
-                        {s.topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      <input value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="Título do PDF" required className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                      <input type="number" value={pdfPages} onChange={e => setPdfPages(e.target.value)} placeholder="Páginas" min="0" className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                      <button type="submit" disabled={saving} className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium disabled:opacity-50">+ PDF</button>
+                    <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
+                      <input value={topicSubjectId === s.id ? topicName : ""} onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }}
+                        placeholder="Novo tópico" required
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                      <button type="submit" disabled={saving} className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium disabled:opacity-50">+ Tópico</button>
                     </form>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+
+                    {s.topics.length > 0 && (
+                      <form onSubmit={addPdf} className="flex gap-2 flex-wrap">
+                        <select value={pdfTopicId} onChange={e => setPdfTopicId(e.target.value)} required
+                          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                          <option value="">Tópico</option>
+                          {s.topics.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <input value={pdfTitle} onChange={e => setPdfTitle(e.target.value)} placeholder="Título do PDF" required
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        <input type="number" value={pdfPages} onChange={e => setPdfPages(e.target.value)} placeholder="Páginas" min="0"
+                          className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        <button type="submit" disabled={saving} className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium disabled:opacity-50">+ PDF</button>
+                      </form>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {subjects.length === 0 && <div className="text-center py-12 text-gray-400">Nenhuma matéria cadastrada ainda.</div>}
         </div>
       </div>

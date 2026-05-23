@@ -13,7 +13,16 @@ export async function GET() {
     include: {
       topics: {
         orderBy: { name: "asc" },
-        include: { pdfs: { orderBy: { title: "asc" }, select: { id: true, title: true, completed: true, totalPages: true, lastPageStudied: true } } },
+        include: {
+          pdfs: {
+            orderBy: { title: "asc" },
+            select: {
+              id: true, title: true, completed: true,
+              totalPages: true, lastPageStudied: true,
+              studyHours: true, questions: true, correctQuestions: true,
+            },
+          },
+        },
       },
     },
   });
