@@ -9,7 +9,8 @@ export async function GET() {
 
   const blocks = await prisma.studyBlock.findMany({
     where: { userId: session.user.id as string },
-    orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+    include: { subject: { select: { id: true, name: true } } },
+    orderBy: [{ dayOfWeek: "asc" }, { hours: "desc" }],
   });
 
   return NextResponse.json(blocks);
@@ -21,39 +22,34 @@ export async function POST(req: Request) {
 
   const body = await req.json();
 
-  // Suporta salvar array inteiro (upsert completo) ou bloco único
-  if (Array.isArray(body)) {
-    // Substitui todos os blocos do usuário de uma vez
-    await prisma.studyBlock.deleteMany({ where: { userId: session.user.id as string } });
-    if (body.length > 0) {
-      await prisma.studyBlock.createMany({
-        data: body.map((b: any) => ({
-          userId: session.user.id as string,
-          dayOfWeek: Number(b.dayOfWeek),
-          startTime: String(b.startTime),
-          endTime: String(b.endTime),
-          blockType: String(b.blockType ?? "leitura"),
-        })),
-      });
-    }
-    const blocks = await prisma.studyBlock.findMany({
-      where: { userId: session.user.id as string },
-      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-    });
-    return NextResponse.json(blocks);
+  if (!Array.isArray(body)) {
+    return NextResponse.json({ message: "Envie um array de blocos." }, { status: 400 });
   }
 
-  // Bloco único
-  const block = await prisma.studyBlock.create({
-    data: {
-      userId: session.user.id as string,
-      dayOfWeek: Number(body.dayOfWeek),
-      startTime: String(body.startTime),
-      endTime: String(body.endTime),
-      blockType: String(body.blockType ?? "leitura"),
-    },
+  // Substitui todos os blocos do usuário
+  await prisma.studyBlock.deleteMany({ where: { userId: session.user.id as string } });
+
+  if (body.length > 0) {
+    await prisma.studyBlock.createMany({
+      data: body.map((b: any) => ({
+        userId: session.user.id as string,
+        dayOfWeek: Number(b.dayOfWeek),
+        hours: parseFloat(b.hours) || 1,
+        subjectId: b.subjectId || null,
+        blockType: String(b.blockType ?? "leitura"),
+        startTime: b.startTime || null,
+        endTime: b.endTime || null,
+      })),
+    });
+  }
+
+  const blocks = await prisma.studyBlock.findMany({
+    where: { userId: session.user.id as string },
+    include: { subject: { select: { id: true, name: true } } },
+    orderBy: [{ dayOfWeek: "asc" }, { hours: "desc" }],
   });
-  return NextResponse.json(block);
+
+  return NextResponse.json(blocks);
 }
 
 export async function DELETE(req: Request) {

@@ -1,0 +1,8 @@
+-- AlterTable
+ALTER TABLE "StudyBlock" ADD COLUMN     "hours" DOUBLE PRECISION NOT NULL DEFAULT 1,
+ADD COLUMN     "subjectId" TEXT,
+ALTER COLUMN "startTime" DROP NOT NULL,
+ALTER COLUMN "endTime" DROP NOT NULL;
+
+-- AddForeignKey
+ALTER TABLE "StudyBlock" ADD CONSTRAINT "StudyBlock_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject"("id") ON DELETE SET NULL ON UPDATE CASCADE;

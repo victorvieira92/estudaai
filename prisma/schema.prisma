@@ -52,6 +52,7 @@ model Subject {
   errorNotes       ErrorNote[]
   flashcards       Flashcard[]
   resumos          Resumo[]
+  studyBlocks      StudyBlock[]
 }
 
 model Topic {
@@ -212,7 +213,6 @@ model WeeklyCycleConfig {
   userId    String   @unique
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Horas por dia da semana — null = dia sem estudo
   sun Float?
   mon Float?
   tue Float?
@@ -233,9 +233,17 @@ model StudyBlock {
   // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb
   dayOfWeek Int
 
-  startTime String   // "04:15"
-  endTime   String   // "05:30"
+  // Horas dedicadas a esta matéria neste dia
+  hours     Float    @default(1)
 
-  // "leitura" | "exercicios" | "revisao7d" | "revisao14_30d"
+  // Matéria selecionada (opcional — pode ser revisão sem matéria fixa)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  // Tipo: "leitura" | "exercicios" | "revisao7d" | "revisao14_30d"
   blockType String   @default("leitura")
+
+  // Mantidos para compatibilidade com planejamento de horários
+  startTime String?
+  endTime   String?
 }
