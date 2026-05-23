@@ -159,6 +159,7 @@ model ErrorNote {
   topic          String?
   banca          String?
   difficulty     String   @default("Media")
+  errorType      String?  // "desatencao" | "nao_estudei" | "nao_lembrei" | "confundi_conceitos" | "interpretacao" | "pegadinha" | "outro"
   resolved       Boolean  @default(false)
   reviewCount    Int      @default(0)
   wrongCount     Int      @default(0)
@@ -230,20 +231,13 @@ model StudyBlock {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb
   dayOfWeek Int
-
-  // Horas dedicadas a esta matéria neste dia
   hours     Float    @default(1)
 
-  // Matéria selecionada (opcional — pode ser revisão sem matéria fixa)
   subjectId String?
   subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
-  // Tipo: "leitura" | "exercicios" | "revisao7d" | "revisao14_30d"
   blockType String   @default("leitura")
-
-  // Mantidos para compatibilidade com planejamento de horários
   startTime String?
   endTime   String?
 }
