@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, Brain,
-  FileText, BarChart2, Calendar, Zap, LogOut, Target, UserCircle, FolderOpen, CalendarDays
+  FileText, BarChart2, CalendarDays, Zap, LogOut, Target, UserCircle, FolderOpen
 } from "lucide-react";
 
 const nav = [
@@ -19,7 +19,6 @@ const nav = [
   { href: "/caderno",          label: "Caderno de Erros",  icon: FileText },
   { href: "/resumos",          label: "Resumos",           icon: FolderOpen },
   { href: "/estatisticas",     label: "Estatisticas",      icon: BarChart2 },
-  { href: "/planejamento",     label: "Planejamento",      icon: Calendar },
   { href: "/perfil",           label: "Minha Conta",       icon: UserCircle },
 ];
 
