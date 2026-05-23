@@ -36,6 +36,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   });
   if (!pdf) return NextResponse.json({ message: "PDF não encontrado." }, { status: 404 });
 
+  // Calcula erros automaticamente se questões ou acertos foram informados
+  const questions       = body.questions        != null ? Number(body.questions)        : pdf.questions;
+  const correctQuestions= body.correctQuestions != null ? Number(body.correctQuestions) : pdf.correctQuestions;
+  const wrongQuestions  = Math.max(0, questions - correctQuestions);
+
   const updated = await prisma.pdf.update({
     where: { id: params.id },
     data: {
@@ -44,9 +49,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       ...(body.lastPageStudied != null  && { lastPageStudied: Number(body.lastPageStudied) }),
       ...(body.completed       != null  && { completed: Boolean(body.completed) }),
       ...(body.studyHours      != null  && { studyHours: Number(body.studyHours) }),
-      ...(body.questions       != null  && { questions: Number(body.questions) }),
-      ...(body.correctQuestions != null && { correctQuestions: Number(body.correctQuestions) }),
-      ...(body.wrongQuestions  != null  && { wrongQuestions: Number(body.wrongQuestions) }),
+      questions,
+      correctQuestions,
+      wrongQuestions,
     },
   });
 
@@ -73,7 +78,6 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     data: { totalPdfs: { decrement: 1 } },
   });
 
-  // Recalcula totais da matéria
   await recalcSubject(pdf.topic.subject.id);
 
   return NextResponse.json({ ok: true });
