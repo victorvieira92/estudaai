@@ -23,6 +23,8 @@ model User {
   sessions      StudySession[]
   weeklyGoals   WeeklyGoal[]
   resumos       Resumo[]
+  weeklyConfig  WeeklyCycleConfig?
+  studyBlocks   StudyBlock[]
 }
 
 model Subject {
@@ -200,4 +202,40 @@ model Resumo {
 
   subjectId String?
   subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+}
+
+model WeeklyCycleConfig {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Horas por dia da semana — null = dia sem estudo
+  sun Float?
+  mon Float?
+  tue Float?
+  wed Float?
+  thu Float?
+  fri Float?
+  sat Float?
+}
+
+model StudyBlock {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 0=Dom, 1=Seg, 2=Ter, 3=Qua, 4=Qui, 5=Sex, 6=Sáb
+  dayOfWeek Int
+
+  startTime String   // "04:15"
+  endTime   String   // "05:30"
+
+  // "leitura" | "exercicios" | "revisao7d" | "revisao14_30d"
+  blockType String   @default("leitura")
 }
