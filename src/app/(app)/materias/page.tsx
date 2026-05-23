@@ -34,6 +34,7 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
   const [editLogData, setEditLogData] = useState({ studyHours: 0, questions: 0, correctQuestions: 0, wrongQuestions: 0 });
   const [newLog, setNewLog] = useState({ studyHours: "", questions: "", correctQuestions: "", wrongQuestions: "" });
   const [savingLog, setSavingLog] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(pdf.title);
   const [editCompleted, setEditCompleted] = useState(pdf.completed);
@@ -199,15 +200,23 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
 
       {/* Histórico */}
       <div className="mt-5">
-        <h4 className="font-bold text-gray-900 mb-3">Histórico de Estudos</h4>
-        {loadingLogs && !logsLoaded ? (
-          <p className="text-sm text-gray-400">Carregando...</p>
-        ) : logs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-400 text-center">
-            Nenhum estudo registrado ainda.
-          </div>
-        ) : (
-          <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => { if (!showHistory) loadLogs(); setShowHistory(h => !h); }}
+          className="w-full flex items-center justify-between py-2 text-left group"
+        >
+          <h4 className="font-bold text-gray-900">Histórico de Estudos {logs.length > 0 && <span className="text-gray-400 font-normal text-sm">({logs.length})</span>}</h4>
+          <span className="text-xs text-gray-400 group-hover:text-gray-700 transition-colors">{showHistory ? "▲ Fechar" : "▼ Ver histórico"}</span>
+        </button>
+        {showHistory && (
+          loadingLogs ? (
+            <p className="text-sm text-gray-400 mt-2">Carregando...</p>
+          ) : logs.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-400 text-center mt-2">
+              Nenhum estudo registrado ainda.
+            </div>
+          ) : (
+            <div className="space-y-2 mt-2">
             {logs.map(log => {
               const logAcc = accuracy(log.correctQuestions, log.questions);
               const isEditingThis = editingLog === log.id;
@@ -286,6 +295,7 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
               );
             })}
           </div>
+          )
         )}
       </div>
     </div>
@@ -493,19 +503,23 @@ export default function MateriasPage() {
                         </div>
 
                         {/* Adicionar PDF */}
-                        <form onSubmit={addPdf} className="flex gap-2 flex-wrap mb-4">
-                          <input
-                            value={pdfTopicId === t.id ? pdfTitle : ""}
-                            onChange={e => { setPdfTopicId(t.id); setPdfTitle(e.target.value); }}
-                            onClick={() => setPdfTopicId(t.id)}
-                            placeholder="Ex: PDF 01 - CPC 27" required
-                            className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                          <input type="number" min="0"
-                            value={pdfTopicId === t.id ? pdfPages : "0"}
-                            onChange={e => { setPdfTopicId(t.id); setPdfPages(e.target.value); }}
-                            onClick={() => setPdfTopicId(t.id)}
-                            placeholder="Páginas"
-                            className="w-28 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        <form onSubmit={addPdf} className="flex gap-2 flex-wrap items-end mb-4">
+                          <div className="flex-1">
+                            <input
+                              value={pdfTopicId === t.id ? pdfTitle : ""}
+                              onChange={e => { setPdfTopicId(t.id); setPdfTitle(e.target.value); }}
+                              onClick={() => setPdfTopicId(t.id)}
+                              placeholder="Ex: PDF 01 - CPC 27" required
+                              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Qtde Páginas</label>
+                            <input type="number" min="0"
+                              value={pdfTopicId === t.id ? pdfPages : "0"}
+                              onChange={e => { setPdfTopicId(t.id); setPdfPages(e.target.value); }}
+                              onClick={() => setPdfTopicId(t.id)}
+                              className="w-28 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                          </div>
                           <button type="submit" disabled={saving || pdfTopicId !== t.id}
                             className="px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
                             + PDF
