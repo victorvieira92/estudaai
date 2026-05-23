@@ -185,7 +185,7 @@ export default function CalendarioCicloPage() {
 
   const hoursArray = configToHoursArray(config);
   const calendar = buildCalendar(weekOffset, subjects, reviews, errors, hoursArray);
-  const totalWeekHours = hoursArray.reduce((a, h) => a + (h ?? 0), 0);
+  const totalWeekHours = hoursArray.reduce((a, h) => (a ?? 0) + (h ?? 0), 0) as number;
 
   const subjectColorMap = new Map<string, typeof SUBJECT_COLORS[0]>();
   subjects.forEach((s, i) => subjectColorMap.set(s.id, SUBJECT_COLORS[i % SUBJECT_COLORS.length]));
