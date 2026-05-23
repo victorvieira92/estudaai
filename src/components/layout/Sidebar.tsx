@@ -5,24 +5,26 @@ import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, Brain,
   FileText, BarChart2, CalendarDays, Zap, LogOut, Target,
-  UserCircle, FolderOpen, TrendingUp
+  UserCircle, FolderOpen, TrendingUp, MessageSquare
 } from "lucide-react";
 
 const nav = [
-  { href: "/dashboard",        label: "Dashboard",        icon: LayoutDashboard },
-  { href: "/hoje",             label: "Hoje",              icon: Sun },
-  { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
-  { href: "/ciclo",            label: "Ciclo Inteligente", icon: Zap },
-  { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays },
-  { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp },
-  { href: "/materias",         label: "Materias",          icon: Target },
-  { href: "/revisoes",         label: "Revisoes",          icon: RefreshCw },
-  { href: "/flashcards",       label: "Flashcards",        icon: Brain },
-  { href: "/caderno",          label: "Caderno de Erros",  icon: FileText },
-  { href: "/resumos",          label: "Resumos",           icon: FolderOpen },
-  { href: "/estatisticas",     label: "Estatisticas",      icon: BarChart2 },
-  { href: "/perfil",           label: "Minha Conta",       icon: UserCircle },
+  { href: "/dashboard",        label: "Dashboard",        icon: LayoutDashboard, external: false },
+  { href: "/hoje",             label: "Hoje",              icon: Sun,             external: false },
+  { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen,        external: false },
+  { href: "/ciclo",            label: "Ciclo Inteligente", icon: Zap,             external: false },
+  { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays,    external: false },
+  { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp,      external: false },
+  { href: "/materias",         label: "Materias",          icon: Target,          external: false },
+  { href: "/revisoes",         label: "Revisoes",          icon: RefreshCw,       external: false },
+  { href: "/flashcards",       label: "Flashcards",        icon: Brain,           external: false },
+  { href: "/caderno",          label: "Caderno de Erros",  icon: FileText,        external: false },
+  { href: "/resumos",          label: "Resumos",           icon: FolderOpen,      external: false },
+  { href: "/estatisticas",     label: "Estatisticas",      icon: BarChart2,       external: false },
+  { href: "/perfil",           label: "Minha Conta",       icon: UserCircle,      external: false },
 ];
+
+const STUDY_CHAT_URL = "https://studychat-production-9f95.up.railway.app/";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -46,6 +48,19 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Divisor */}
+        <div className="pt-2 pb-1">
+          <div className="border-t border-gray-800"/>
+        </div>
+
+        {/* StudyChat — link externo */}
+        <a href={STUDY_CHAT_URL} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-gray-400 hover:text-white hover:bg-gray-800">
+          <MessageSquare className="w-4 h-4 shrink-0" />
+          <span>StudyChat</span>
+          <span className="ml-auto text-[10px] text-gray-600">↗</span>
+        </a>
       </nav>
       <div className="p-3 border-t border-gray-800">
         <button onClick={() => signOut({ callbackUrl: "/login" })}
