@@ -2,50 +2,52 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { addDays, startOfToday } from "@/lib/utils";
 
+// Exporta em formato tab-separated compatível com Anki import
+// O Anki aceita arquivos .txt com campos separados por tab:
+// pergunta[TAB]resposta[TAB]deck
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json([], { status: 401 });
-
-  const cards = await prisma.flashcard.findMany({
-    where: { userId: session.user.id as string },
-    orderBy: { createdAt: "desc" },
-    include: { subject: { select: { name: true } } },
-  });
-  return NextResponse.json(cards);
-}
-
-export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
-  const { question, answer, subjectId, topic, banca, difficulty = "Media" } = await req.json();
-  if (!question?.trim() || !answer?.trim() || !subjectId)
-    return NextResponse.json({ message: "Dados inválidos." }, { status: 400 });
+  const [flashcards, errorNotes] = await Promise.all([
+    prisma.flashcard.findMany({
+      where: { userId: session.user.id as string },
+      include: { subject: { select: { name: true } } },
+    }),
+    prisma.errorNote.findMany({
+      where: { userId: session.user.id as string },
+      include: { subject: { select: { name: true } } },
+    }),
+  ]);
 
-  const today = startOfToday();
-  const card = await prisma.flashcard.create({
-    data: { question: question.trim(), answer: answer.trim(), subjectId, topic, banca, difficulty, userId: session.user.id as string, nextReviewAt: addDays(today, 1) },
+  // Header compatível com Anki
+  const lines = [
+    "#separator:tab",
+    "#html:true",
+    "#deck column:3",
+    "#notetype:Basic",
+  ];
+
+  // Limpa HTML para texto puro
+  const strip = (html: string) => html?.replace(/<[^>]*>/g, "") ?? "";
+
+  for (const c of flashcards) {
+    const deck = c.topic ? `${c.subject.name}::${c.topic}` : c.subject.name;
+    lines.push([strip(c.question), strip(c.answer), deck].join("\t"));
+  }
+
+  for (const n of errorNotes) {
+    const deck = n.topic ? `${n.subject.name}::${n.topic}` : n.subject.name;
+    lines.push([strip(n.title), strip(n.description), deck].join("\t"));
+  }
+
+  const content = lines.join("\n");
+
+  return new NextResponse(content, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": 'attachment; filename="estudaai_anki.txt"',
+    },
   });
-  return NextResponse.json(card);
-}
-
-export async function PATCH(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
-
-  const { id, result } = await req.json(); // result: "easy"|"medium"|"hard"|"wrong"
-  const card = await prisma.flashcard.findFirst({ where: { id, userId: session.user.id as string } });
-  if (!card) return NextResponse.json({ message: "Card não encontrado." }, { status: 404 });
-
-  const intervalMap: Record<string, number> = { easy: card.intervalDays * 2, medium: card.intervalDays, hard: Math.max(1, Math.floor(card.intervalDays / 2)), wrong: 1 };
-  const newInterval = intervalMap[result] ?? 1;
-  const wrong = result === "wrong" ? card.wrongCount + 1 : card.wrongCount;
-
-  await prisma.flashcard.update({
-    where: { id },
-    data: { intervalDays: newInterval, reviewCount: { increment: 1 }, wrongCount: wrong, lastReviewedAt: new Date(), nextReviewAt: addDays(startOfToday(), newInterval) },
-  });
-  return NextResponse.json({ ok: true });
 }
