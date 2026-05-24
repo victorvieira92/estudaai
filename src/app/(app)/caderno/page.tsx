@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, CheckCircle, XCircle, Pencil, Trash2, X, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Search, BarChart2, BookOpen, BookMarked } from "lucide-react";
 
 interface Subject { id: string; name: string; }
 interface ErrorNote {
   id: string; title: string; description: string; topic: string | null;
   banca: string | null; difficulty: string; errorType: string | null;
   resolved: boolean; reviewCount: number; wrongCount: number;
+  createdAt: string;
   subject: { name: string }; subjectId: string;
 }
 
@@ -21,67 +22,53 @@ const ERROR_TYPES = [
 ];
 
 const COLORS = ["#000000","#dc2626","#16a34a","#2563eb","#9333ea","#ea580c","#0891b2"];
-const FONT_SIZES = ["12px","14px","16px","18px","20px","24px"];
 
-function errorTypeLabel(v: string | null) { return v ? ERROR_TYPES.find(e => e.value === v) ?? null : null; }
+function etLabel(v: string | null) { return v ? ERROR_TYPES.find(e => e.value === v) ?? null : null; }
+function fmtDate(d: string) { return new Date(d).toLocaleDateString("pt-BR"); }
+function stripHtml(html: string) { return html?.replace(/<[^>]*>/g, "") ?? ""; }
 
-// Editor rico reutilizável
 function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; minRows?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-
-  const exec = (cmd: string, val?: string) => {
-    document.execCommand(cmd, false, val);
-    if (ref.current) onChange(ref.current.innerHTML);
-  };
-
+  const exec = (cmd: string, val?: string) => { document.execCommand(cmd, false, val); if (ref.current) onChange(ref.current.innerHTML); };
   return (
     <div className="border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-gray-900">
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-gray-50 flex-wrap">
-        <button type="button" onMouseDown={e => { e.preventDefault(); exec("bold"); }}
-          className="w-7 h-7 flex items-center justify-center font-bold text-sm hover:bg-gray-200 rounded transition-colors">B</button>
-        <button type="button" onMouseDown={e => { e.preventDefault(); exec("italic"); }}
-          className="w-7 h-7 flex items-center justify-center italic text-sm hover:bg-gray-200 rounded transition-colors">I</button>
-        <button type="button" onMouseDown={e => { e.preventDefault(); exec("underline"); }}
-          className="w-7 h-7 flex items-center justify-center underline text-sm hover:bg-gray-200 rounded transition-colors">U</button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("bold")}} className="w-7 h-7 flex items-center justify-center font-bold text-sm hover:bg-gray-200 rounded">B</button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("italic")}} className="w-7 h-7 flex items-center justify-center italic text-sm hover:bg-gray-200 rounded">I</button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("underline")}} className="w-7 h-7 flex items-center justify-center underline text-sm hover:bg-gray-200 rounded">U</button>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        {COLORS.map(c => (
-          <button key={c} type="button" onMouseDown={e => { e.preventDefault(); exec("foreColor", c); }}
-            className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform"
-            style={{ backgroundColor: c }}/>
+        {COLORS.map(c=>(
+          <button key={c} type="button" onMouseDown={e=>{e.preventDefault();exec("foreColor",c)}} className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform" style={{backgroundColor:c}}/>
         ))}
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        <select onChange={e => { exec("fontSize", "7"); /* workaround */ document.execCommand("styleWithCSS", false, "true"); exec("fontSize", e.target.value); }}
-          className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none" defaultValue="">
-          <option value="" disabled>Tamanho</option>
-          {["1","2","3","4","5","6","7"].map((s, i) => <option key={s} value={s}>{FONT_SIZES[Math.min(i, FONT_SIZES.length-1)]}</option>)}
+        <select defaultValue="" onChange={e=>{exec("fontSize",e.target.value)}} className="text-xs border border-gray-200 rounded px-1 py-0.5 bg-white focus:outline-none">
+          <option value="" disabled>Tam.</option>
+          {[["1","10px"],["2","12px"],["3","14px"],["4","16px"],["5","18px"],["6","22px"],["7","26px"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
         </select>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        <button type="button" onMouseDown={e => { e.preventDefault(); exec("removeFormat"); }}
-          className="px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200 rounded transition-colors">Limpar</button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("removeFormat")}} className="px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200 rounded">✕</button>
       </div>
-      <div
-        ref={ref}
-        contentEditable
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        onInput={() => { if (ref.current) onChange(ref.current.innerHTML); }}
-        className="px-4 py-3 text-sm text-gray-900 focus:outline-none"
-        style={{ minHeight: `${minRows * 28}px` }}
-        dangerouslySetInnerHTML={{ __html: value }}
-      />
+      <div ref={ref} contentEditable suppressContentEditableWarning data-placeholder={placeholder}
+        onInput={()=>{if(ref.current) onChange(ref.current.innerHTML)}}
+        className="px-4 py-3 text-sm text-gray-900 focus:outline-none" style={{minHeight:`${minRows*28}px`}}
+        dangerouslySetInnerHTML={{__html:value}}/>
       <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;}`}</style>
     </div>
   );
 }
 
+type Tab = "cadernos" | "registrar" | "evolucao" | "pesquisa";
+
 export default function CadernoPage() {
+  const [tab, setTab] = useState<Tab>("cadernos");
   const [notes, setNotes] = useState<ErrorNote[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [filter, setFilter] = useState<"pending"|"all"|"resolved">("pending");
-  const [expandedSubjects, setExpandedSubjects] = useState<Set<string>>(new Set());
+  const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Novo erro
+  // Form
   const [subjectId, setSubjectId] = useState("");
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -90,9 +77,10 @@ export default function CadernoPage() {
   const [difficulty, setDifficulty] = useState("Media");
   const [errorType, setErrorType] = useState("");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   // Edição
-  const [editingNote, setEditingNote] = useState<ErrorNote | null>(null);
+  const [editingNote, setEditingNote] = useState<ErrorNote|null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editTopic, setEditTopic] = useState("");
@@ -102,114 +90,104 @@ export default function CadernoPage() {
   const [editSubjectId, setEditSubjectId] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const load = () => fetch("/api/error-notes").then(r => r.json()).then(d => setNotes(Array.isArray(d) ? d : [])).catch(console.error);
-  useEffect(() => {
+  const load = () => fetch("/api/error-notes").then(r=>r.json()).then(d=>setNotes(Array.isArray(d)?d:[])).catch(console.error);
+  useEffect(()=>{
     load();
-    fetch("/api/subjects").then(r => r.json()).then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? []))).catch(console.error);
-  }, []);
+    fetch("/api/subjects").then(r=>r.json()).then(d=>setSubjects(Array.isArray(d)?d:(d.subjects??[]))).catch(console.error);
+  },[]);
 
-  const filtered = useMemo(() => notes.filter(n =>
-    filter === "all" ? true : filter === "pending" ? !n.resolved : n.resolved
-  ), [notes, filter]);
+  const filtered = useMemo(()=>notes.filter(n=>filter==="all"?true:filter==="pending"?!n.resolved:n.resolved),[notes,filter]);
 
-  // Agrupamento: disciplina > tópico > erros
-  const grouped = useMemo(() => {
-    const bySubject: Record<string, { name: string; topics: Record<string, ErrorNote[]>; noTopic: ErrorNote[] }> = {};
+  const grouped = useMemo(()=>{
+    const out: Record<string,{name:string;topics:Record<string,ErrorNote[]>;noTopic:ErrorNote[]}> = {};
     for (const n of filtered) {
-      const sName = n.subject.name;
-      if (!bySubject[sName]) bySubject[sName] = { name: sName, topics: {}, noTopic: [] };
-      if (n.topic) {
-        if (!bySubject[sName].topics[n.topic]) bySubject[sName].topics[n.topic] = [];
-        bySubject[sName].topics[n.topic].push(n);
-      } else {
-        bySubject[sName].noTopic.push(n);
-      }
+      if (!out[n.subject.name]) out[n.subject.name]={name:n.subject.name,topics:{},noTopic:[]};
+      if (n.topic) { if (!out[n.subject.name].topics[n.topic]) out[n.subject.name].topics[n.topic]=[]; out[n.subject.name].topics[n.topic].push(n); }
+      else out[n.subject.name].noTopic.push(n);
     }
-    return bySubject;
-  }, [filtered]);
+    return out;
+  },[filtered]);
+
+  const searchResults = useMemo(()=>{
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return notes.filter(n=>stripHtml(n.title).toLowerCase().includes(q)||stripHtml(n.description).toLowerCase().includes(q)||(n.topic??"").toLowerCase().includes(q)||(n.banca??"").toLowerCase().includes(q)||n.subject.name.toLowerCase().includes(q));
+  },[notes,searchQuery]);
+
+  // Métricas
+  const metrics = useMemo(()=>{
+    const total = notes.length;
+    const resolved = notes.filter(n=>n.resolved).length;
+    const pending = notes.filter(n=>!n.resolved).length;
+    const critical = notes.filter(n=>!n.resolved&&n.difficulty==="Alta").length;
+    const totalReviews = notes.reduce((a,n)=>a+n.reviewCount,0);
+    const totalWrong = notes.reduce((a,n)=>a+n.wrongCount,0);
+    const taxaAcerto = totalReviews>0 ? Math.round(((totalReviews-totalWrong)/totalReviews)*100) : 0;
+    const bySubject = Object.entries(grouped).map(([name,data])=>{
+      const all = [...data.noTopic,...Object.values(data.topics).flat()];
+      const r = all.filter(n=>n.resolved).length;
+      return { name, total:all.length, resolved:r, pending:all.length-r, taxaAcerto: all.reduce((a,n)=>a+n.reviewCount,0)>0?Math.round(((all.reduce((a,n)=>a+n.reviewCount,0)-all.reduce((a,n)=>a+n.wrongCount,0))/all.reduce((a,n)=>a+n.reviewCount,0))*100):0 };
+    });
+    return { total, resolved, pending, critical, totalReviews, taxaAcerto, bySubject };
+  },[notes,grouped]);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
-    const strip = (h: string) => h.replace(/<[^>]*>/g, "").trim();
-    if (!strip(title)) { setSaving(false); return; }
-    const res = await fetch("/api/error-notes", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description: desc, subjectId, topic, banca, difficulty, errorType: errorType || null }),
-    });
-    if (res.ok) { setTitle(""); setDesc(""); setTopic(""); setBanca(""); setErrorType(""); load(); }
+    if (!stripHtml(title).trim()) { setSaving(false); return; }
+    const res = await fetch("/api/error-notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,description:desc,subjectId,topic,banca,difficulty,errorType:errorType||null})});
+    if (res.ok) { setTitle(""); setDesc(""); setTopic(""); setBanca(""); setErrorType(""); setSaved(true); setTimeout(()=>setSaved(false),2500); load(); }
     setSaving(false);
   };
 
-  const action = async (id: string, act: string) => {
-    await fetch("/api/error-notes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, action: act }) });
+  const action = async (id:string,act:string)=>{
+    await fetch("/api/error-notes",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,action:act})});
     load();
   };
 
-  const deleteNote = async (id: string) => {
-    if (!confirm("Excluir este erro?")) return;
-    await fetch(`/api/error-notes/${id}`, { method: "DELETE" }); load();
+  const deleteNote = async (id:string)=>{
+    if(!confirm("Excluir este erro?"))return;
+    await fetch(`/api/error-notes/${id}`,{method:"DELETE"}); load();
   };
 
-  const startEdit = (n: ErrorNote) => {
+  const startEdit = (n:ErrorNote)=>{
     setEditingNote(n); setEditTitle(n.title); setEditDesc(n.description);
-    setEditTopic(n.topic ?? ""); setEditBanca(n.banca ?? "");
-    setEditDifficulty(n.difficulty); setEditErrorType(n.errorType ?? ""); setEditSubjectId(n.subjectId);
+    setEditTopic(n.topic??""); setEditBanca(n.banca??"");
+    setEditDifficulty(n.difficulty); setEditErrorType(n.errorType??""); setEditSubjectId(n.subjectId);
   };
 
-  const saveEdit = async () => {
-    if (!editingNote) return; setSavingEdit(true);
-    await fetch(`/api/error-notes/${editingNote.id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editTitle, description: editDesc, topic: editTopic, banca: editBanca, difficulty: editDifficulty, errorType: editErrorType || null, subjectId: editSubjectId }),
-    });
+  const saveEdit = async()=>{
+    if(!editingNote)return; setSavingEdit(true);
+    await fetch(`/api/error-notes/${editingNote.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:editTitle,description:editDesc,topic:editTopic,banca:editBanca,difficulty:editDifficulty,errorType:editErrorType||null,subjectId:editSubjectId})});
     setEditingNote(null); setSavingEdit(false); load();
   };
 
-  const toggleSubject = (s: string) => setExpandedSubjects(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
-  const toggleTopic = (k: string) => setExpandedTopics(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; });
-
-  // Card de erro individual
-  const NoteCard = ({ n }: { n: ErrorNote }) => {
-    const errType = errorTypeLabel(n.errorType);
+  const NoteCard = ({n}:{n:ErrorNote})=>{
+    const et = etLabel(n.errorType);
     return (
-      <div className={`bg-white rounded-2xl border p-5 ${n.resolved ? "border-green-200 opacity-70" : "border-gray-200"}`}>
+      <div className={`bg-white rounded-2xl border p-5 ${n.resolved?"border-green-200 opacity-70":"border-gray-200"}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${n.difficulty === "Alta" ? "bg-red-100 text-red-700" : n.difficulty === "Media" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
-                {n.difficulty}
-              </span>
-              {errType && <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{errType.emoji} {errType.label}</span>}
-              {n.banca && <span className="text-xs text-gray-400">• {n.banca}</span>}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${n.difficulty==="Alta"?"bg-red-100 text-red-700":n.difficulty==="Media"?"bg-yellow-100 text-yellow-700":"bg-green-100 text-green-700"}`}>{n.difficulty}</span>
+              {et&&<span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{et.emoji} {et.label}</span>}
+              {n.banca&&<span className="text-xs text-gray-400">• {n.banca}</span>}
+              <span className="text-xs text-gray-400">{fmtDate(n.createdAt)}</span>
             </div>
-            <div className="font-semibold text-gray-900 mb-2" dangerouslySetInnerHTML={{ __html: n.title }}/>
-            {n.description && <div className="text-sm text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{ __html: n.description }}/>}
+            <div className="font-semibold text-gray-900 mb-2 leading-snug" dangerouslySetInnerHTML={{__html:n.title}}/>
+            {n.description&&<div className="text-sm text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{__html:n.description}}/>}
             <p className="text-xs text-gray-400 mt-2">Revisões: {n.reviewCount} · Errou de novo: {n.wrongCount}x</p>
           </div>
           <div className="flex flex-col gap-2 shrink-0 items-end">
-            {!n.resolved && (
+            {!n.resolved&&(
               <div className="flex gap-1.5">
-                <button onClick={() => action(n.id, "wrong")} title="Errei de novo"
-                  className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors">
-                  <XCircle className="w-4 h-4"/>
-                </button>
-                <button onClick={() => action(n.id, "review")}
-                  className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors">
-                  Revisei
-                </button>
-                <button onClick={() => action(n.id, "resolve")} title="Resolvido"
-                  className="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors">
-                  <CheckCircle className="w-4 h-4"/>
-                </button>
+                <button onClick={()=>action(n.id,"wrong")} title="Errei de novo" className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors"><XCircle className="w-4 h-4"/></button>
+                <button onClick={()=>action(n.id,"review")} className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors">Revisei</button>
+                <button onClick={()=>action(n.id,"resolve")} title="Resolvido" className="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors"><CheckCircle className="w-4 h-4"/></button>
               </div>
             )}
             <div className="flex gap-1.5">
-              <button onClick={() => startEdit(n)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                <Pencil className="w-4 h-4"/>
-              </button>
-              <button onClick={() => deleteNote(n.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                <Trash2 className="w-4 h-4"/>
-              </button>
+              <button onClick={()=>startEdit(n)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
+              <button onClick={()=>deleteNote(n.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
             </div>
           </div>
         </div>
@@ -217,238 +195,332 @@ export default function CadernoPage() {
     );
   };
 
+  const TABS = [
+    { key:"cadernos",  label:"Meus Cadernos",  icon:BookMarked },
+    { key:"registrar", label:"Registrar Erro",  icon:Plus },
+    { key:"evolucao",  label:"Evolução",        icon:BarChart2 },
+    { key:"pesquisa",  label:"Pesquisar",       icon:Search },
+  ] as const;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-gray-950 text-white px-8 py-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Caderno de Erros</h1>
-          <p className="text-gray-400 text-sm mt-1">Registre, revise e resolva seus erros por disciplina</p>
-        </div>
-        <div className="flex gap-2">
-          {(["pending","all","resolved"] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${filter === f ? "bg-white text-gray-900" : "bg-gray-800 text-gray-300 hover:bg-gray-700"}`}>
-              {f === "pending" ? "Pendentes" : f === "all" ? "Todos" : "Resolvidos"}
+      {/* Header */}
+      <div className="bg-gray-950 text-white px-8 py-6">
+        <h1 className="text-3xl font-bold">Caderno de Erros</h1>
+        <p className="text-gray-400 text-sm mt-1">Transforme seus erros em evolução</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white border-b border-gray-200 px-8">
+        <div className="flex gap-0">
+          {TABS.map(({key,label,icon:Icon})=>(
+            <button key={key} onClick={()=>setTab(key as Tab)}
+              className={`flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 transition-colors ${tab===key?"border-gray-900 text-gray-900":"border-transparent text-gray-500 hover:text-gray-700"}`}>
+              <Icon className="w-4 h-4"/>{label}
             </button>
           ))}
         </div>
       </div>
 
       {/* Modal edição */}
-      {editingNote && (
+      {editingNote&&(
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold">Editar erro</h2>
-              <button onClick={() => setEditingNote(null)} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg"><X className="w-5 h-5"/></button>
+              <button onClick={()=>setEditingNote(null)} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg"><X className="w-5 h-5"/></button>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Disciplina</label>
-                <select value={editSubjectId} onChange={e => setEditSubjectId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <select value={editSubjectId} onChange={e=>setEditSubjectId(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tópico / Conteúdo</label>
-                <input value={editTopic} onChange={e => setEditTopic(e.target.value)} placeholder="Ex: Conceito de Tributo"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                <input value={editTopic} onChange={e=>setEditTopic(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Dificuldade</label>
-                <select value={editDifficulty} onChange={e => setEditDifficulty(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                  {["Baixa","Media","Alta"].map(d => <option key={d} value={d}>{d}</option>)}
+                <select value={editDifficulty} onChange={e=>setEditDifficulty(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                  {["Baixa","Media","Alta"].map(d=><option key={d} value={d}>{d}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Motivo</label>
-                <select value={editErrorType} onChange={e => setEditErrorType(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                <select value={editErrorType} onChange={e=>setEditErrorType(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
                   <option value="">Selecione</option>
-                  {ERROR_TYPES.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+                  {ERROR_TYPES.map(t=><option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Banca</label>
+                <input value={editBanca} onChange={e=>setEditBanca(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Banca</label>
-              <input value={editBanca} onChange={e => setEditBanca(e.target.value)} placeholder="Ex: FGV"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-            </div>
-            <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título</label>
-              <RichEditor value={editTitle} onChange={setEditTitle} placeholder="Questão ou título..." minRows={2}/>
+              <RichEditor value={editTitle} onChange={setEditTitle} minRows={2}/>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Explicação / Por que errei</label>
-              <RichEditor value={editDesc} onChange={setEditDesc} placeholder="Explique o conceito correto..." minRows={4}/>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Explicação</label>
+              <RichEditor value={editDesc} onChange={setEditDesc} minRows={4}/>
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
-                <Check className="w-4 h-4"/>{savingEdit ? "Salvando..." : "Salvar"}
+                <Check className="w-4 h-4"/>{savingEdit?"Salvando...":"Salvar"}
               </button>
-              <button onClick={() => setEditingNote(null)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm">Cancelar</button>
+              <button onClick={()=>setEditingNote(null)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="px-8 py-8 space-y-6">
-        {/* KPIs */}
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            ["Total", notes.length, "text-gray-900"],
-            ["Pendentes", notes.filter(n => !n.resolved).length, "text-red-600"],
-            ["Resolvidos", notes.filter(n => n.resolved).length, "text-green-600"],
-            ["Críticos", notes.filter(n => !n.resolved && n.difficulty === "Alta").length, "text-orange-600"],
-          ].map(([l, v, c]) => (
-            <div key={l as string} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">{l}</p>
-              <p className={`text-3xl font-bold ${c}`}>{v}</p>
+      <div className="px-8 py-8">
+
+        {/* ── ABA: MEUS CADERNOS ─────────────────────────────────────────────── */}
+        {tab==="cadernos"&&(
+          <div className="space-y-6">
+            {/* KPIs */}
+            <div className="grid grid-cols-4 gap-4">
+              {[["Total",notes.length,"text-gray-900"],["Pendentes",metrics.pending,"text-red-600"],["Resolvidos",metrics.resolved,"text-green-600"],["Críticos",metrics.critical,"text-orange-600"]].map(([l,v,c])=>(
+                <div key={l as string} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+                  <p className="text-xs text-gray-500 mb-1">{l}</p>
+                  <p className={`text-3xl font-bold ${c}`}>{v}</p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* Formulário + tipos lado a lado */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold mb-4">Registrar novo erro</h2>
-            <form onSubmit={add} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Disciplina *</label>
-                  <select value={subjectId} onChange={e => setSubjectId(e.target.value)} required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                    <option value="">Selecione</option>
-                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tópico / Conteúdo</label>
-                  <input value={topic} onChange={e => setTopic(e.target.value)} placeholder="Ex: Conceito de Tributo"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Dificuldade</label>
-                  <select value={difficulty} onChange={e => setDifficulty(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                    {["Baixa","Media","Alta"].map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Motivo do erro</label>
-                  <select value={errorType} onChange={e => setErrorType(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
-                    <option value="">Selecione</option>
-                    {ERROR_TYPES.map(t => <option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Banca</label>
-                  <input value={banca} onChange={e => setBanca(e.target.value)} placeholder="Ex: FGV"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título *</label>
-                <RichEditor value={title} onChange={setTitle} placeholder="Digite a questão ou título do erro..." minRows={2}/>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Por que errei / Explicação *</label>
-                <RichEditor value={desc} onChange={setDesc} placeholder="Explique o conceito correto, o que confundiu, como lembrar..." minRows={4}/>
-              </div>
-              <button type="submit" disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50 transition-colors">
-                <Plus className="w-4 h-4"/>Registrar erro
-              </button>
-            </form>
-          </div>
-
-          {/* Tipos de erro */}
-          <div className="col-span-1 bg-white rounded-2xl border border-gray-200 p-5">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">Tipos de erro</h2>
-            <p className="text-xs text-gray-400 mb-3">Clique para selecionar.</p>
-            <div className="space-y-2">
-              {ERROR_TYPES.map(t => (
-                <button key={t.value} type="button" onClick={() => setErrorType(t.value)}
-                  className={`w-full flex items-start gap-2 p-2.5 rounded-xl text-left transition-colors border ${errorType === t.value ? "border-gray-900 bg-gray-900/5" : "border-gray-100 bg-gray-50 hover:border-gray-300"}`}>
-                  <span className="text-base shrink-0">{t.emoji}</span>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-800">{t.label}</p>
-                    <p className="text-xs text-gray-400 leading-tight">{t.desc}</p>
-                  </div>
+            {/* Filtro status */}
+            <div className="flex gap-2">
+              {(["pending","all","resolved"] as const).map(f=>(
+                <button key={f} onClick={()=>setFilter(f)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${filter===f?"bg-gray-900 text-white":"bg-white border border-gray-200 text-gray-600 hover:border-gray-400"}`}>
+                  {f==="pending"?"Pendentes":f==="all"?"Todos":"Resolvidos"}
                 </button>
               ))}
             </div>
-          </div>
-        </div>
 
-        {/* Lista agrupada por disciplina > tópico */}
-        <div className="space-y-3">
-          {Object.keys(grouped).length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              Nenhum erro {filter === "pending" ? "pendente" : filter === "resolved" ? "resolvido" : "registrado"}.
-            </div>
-          )}
-          {Object.entries(grouped).map(([subName, subData]) => {
-            const isExpanded = expandedSubjects.has(subName);
-            const total = subData.noTopic.length + Object.values(subData.topics).reduce((a, arr) => a + arr.length, 0);
-            return (
-              <div key={subName} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                {/* Header da disciplina */}
-                <button onClick={() => toggleSubject(subName)}
-                  className="w-full flex items-center gap-3 px-6 py-4 hover:bg-gray-50 transition-colors text-left">
-                  {isExpanded ? <ChevronDown className="w-5 h-5 text-gray-400 shrink-0"/> : <ChevronRight className="w-5 h-5 text-gray-400 shrink-0"/>}
-                  <div className="flex-1">
-                    <p className="font-bold text-gray-900">{subName}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {total} erro{total !== 1 ? "s" : ""}
-                      {Object.keys(subData.topics).length > 0 && ` · ${Object.keys(subData.topics).length} tópico${Object.keys(subData.topics).length !== 1 ? "s" : ""}`}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-400 shrink-0">{isExpanded ? "Recolher" : "Expandir"}</span>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-gray-100">
-                    {/* Erros sem tópico */}
-                    {subData.noTopic.length > 0 && (
-                      <div className="px-6 py-4 space-y-3 bg-gray-50/50">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Sem tópico</p>
-                        {subData.noTopic.map(n => <NoteCard key={n.id} n={n}/>)}
+            {/* Pastas agrupadas */}
+            <div className="space-y-3">
+              {Object.keys(grouped).length===0&&(
+                <div className="text-center py-16 text-gray-400">
+                  <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30"/>
+                  <p>Nenhum erro {filter==="pending"?"pendente":filter==="resolved"?"resolvido":"registrado"}.</p>
+                  <button onClick={()=>setTab("registrar")} className="mt-3 text-blue-600 text-sm hover:underline">Registrar primeiro erro →</button>
+                </div>
+              )}
+              {Object.entries(grouped).map(([subName,subData])=>{
+                const isExp = expandedSubs.has(subName);
+                const total = subData.noTopic.length + Object.values(subData.topics).reduce((a,arr)=>a+arr.length,0);
+                return (
+                  <div key={subName} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                    <button onClick={()=>setExpandedSubs(p=>{const n=new Set(p);n.has(subName)?n.delete(subName):n.add(subName);return n;})}
+                      className="w-full flex items-center gap-3 px-6 py-4 hover:bg-gray-50 transition-colors text-left">
+                      {isExp?<ChevronDown className="w-5 h-5 text-gray-400 shrink-0"/>:<ChevronRight className="w-5 h-5 text-gray-400 shrink-0"/>}
+                      <div className="flex-1">
+                        <p className="font-bold text-gray-900">{subName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{total} erro{total!==1?"s":""}{Object.keys(subData.topics).length>0&&` · ${Object.keys(subData.topics).length} tópico${Object.keys(subData.topics).length!==1?"s":""}`}</p>
+                      </div>
+                    </button>
+                    {isExp&&(
+                      <div className="border-t border-gray-100">
+                        {subData.noTopic.length>0&&(
+                          <div className="px-6 py-4 space-y-3 bg-gray-50/40">
+                            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Sem tópico</p>
+                            {subData.noTopic.map(n=><NoteCard key={n.id} n={n}/>)}
+                          </div>
+                        )}
+                        {Object.entries(subData.topics).map(([tName,tNotes])=>{
+                          const tk=`${subName}::${tName}`;
+                          const tExp=expandedTopics.has(tk);
+                          return (
+                            <div key={tName} className="border-t border-gray-100">
+                              <button onClick={()=>setExpandedTopics(p=>{const n=new Set(p);n.has(tk)?n.delete(tk):n.add(tk);return n;})}
+                                className="w-full flex items-center gap-3 px-8 py-3.5 hover:bg-gray-50 transition-colors text-left">
+                                {tExp?<ChevronDown className="w-4 h-4 text-gray-400 shrink-0"/>:<ChevronRight className="w-4 h-4 text-gray-400 shrink-0"/>}
+                                <div className="flex-1">
+                                  <p className="text-sm font-semibold text-gray-700">› {tName}</p>
+                                  <p className="text-xs text-gray-400">{tNotes.length} erro{tNotes.length!==1?"s":""}</p>
+                                </div>
+                              </button>
+                              {tExp&&<div className="px-8 pb-4 space-y-3 bg-gray-50/20">{tNotes.map(n=><NoteCard key={n.id} n={n}/>)}</div>}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
-
-                    {/* Tópicos */}
-                    {Object.entries(subData.topics).map(([topicName, topicNotes]) => {
-                      const topicKey = `${subName}::${topicName}`;
-                      const topicExpanded = expandedTopics.has(topicKey);
-                      return (
-                        <div key={topicName} className="border-t border-gray-100">
-                          <button onClick={() => toggleTopic(topicKey)}
-                            className="w-full flex items-center gap-3 px-8 py-3.5 hover:bg-gray-50 transition-colors text-left">
-                            {topicExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 shrink-0"/> : <ChevronRight className="w-4 h-4 text-gray-400 shrink-0"/>}
-                            <div className="flex-1">
-                              <p className="text-sm font-semibold text-gray-700">› {topicName}</p>
-                              <p className="text-xs text-gray-400">{topicNotes.length} erro{topicNotes.length !== 1 ? "s" : ""}</p>
-                            </div>
-                          </button>
-                          {topicExpanded && (
-                            <div className="px-8 pb-4 space-y-3 bg-gray-50/30">
-                              {topicNotes.map(n => <NoteCard key={n.id} n={n}/>)}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
                   </div>
-                )}
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA: REGISTRAR ─────────────────────────────────────────────────── */}
+        {tab==="registrar"&&(
+          <div className="grid grid-cols-3 gap-6">
+            <div className="col-span-2 bg-white rounded-2xl border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold mb-5">Registrar novo erro</h2>
+              <form onSubmit={add} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Disciplina *</label>
+                    <select value={subjectId} onChange={e=>setSubjectId(e.target.value)} required className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                      <option value="">Selecione</option>
+                      {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tópico / Conteúdo</label>
+                    <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Ex: Conceito de Tributo" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Dificuldade</label>
+                    <select value={difficulty} onChange={e=>setDifficulty(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                      {["Baixa","Media","Alta"].map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Motivo</label>
+                    <select value={errorType} onChange={e=>setErrorType(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900">
+                      <option value="">Selecione</option>
+                      {ERROR_TYPES.map(t=><option key={t.value} value={t.value}>{t.emoji} {t.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Banca</label>
+                    <input value={banca} onChange={e=>setBanca(e.target.value)} placeholder="Ex: FGV" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título *</label>
+                  <RichEditor value={title} onChange={setTitle} placeholder="Digite a questão ou o título do erro..." minRows={2}/>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Por que errei / Explicação *</label>
+                  <RichEditor value={desc} onChange={setDesc} placeholder="Explique o conceito correto, o que confundiu, como lembrar..." minRows={5}/>
+                </div>
+                <div className="flex items-center gap-4">
+                  <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50 transition-colors">
+                    <Plus className="w-4 h-4"/>{saving?"Salvando...":"Registrar erro"}
+                  </button>
+                  {saved&&<span className="text-green-600 text-sm font-medium">✓ Erro registrado!</span>}
+                </div>
+              </form>
+            </div>
+            <div className="col-span-1 bg-white rounded-2xl border border-gray-200 p-5">
+              <h2 className="text-sm font-semibold text-gray-700 mb-1">Tipos de erro</h2>
+              <p className="text-xs text-gray-400 mb-3">Clique para selecionar.</p>
+              <div className="space-y-2">
+                {ERROR_TYPES.map(t=>(
+                  <button key={t.value} type="button" onClick={()=>setErrorType(t.value)}
+                    className={`w-full flex items-start gap-2 p-2.5 rounded-xl text-left transition-colors border ${errorType===t.value?"border-gray-900 bg-gray-50":"border-gray-100 bg-gray-50 hover:border-gray-300"}`}>
+                    <span className="text-base shrink-0">{t.emoji}</span>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-800">{t.label}</p>
+                      <p className="text-xs text-gray-400 leading-tight">{t.desc}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA: EVOLUÇÃO ──────────────────────────────────────────────────── */}
+        {tab==="evolucao"&&(
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                ["Total de erros", notes.length, "text-gray-900"],
+                ["Resolvidos", metrics.resolved, "text-green-600"],
+                ["Total de revisões", metrics.totalReviews, "text-blue-600"],
+                ["Taxa de acerto", `${metrics.taxaAcerto}%`, metrics.taxaAcerto>=70?"text-green-600":metrics.taxaAcerto>=50?"text-yellow-600":"text-red-600"],
+              ].map(([l,v,c])=>(
+                <div key={l as string} className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
+                  <p className="text-xs text-gray-400 mb-2">{l}</p>
+                  <p className={`text-4xl font-bold ${c}`}>{v}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h2 className="font-bold text-gray-900">Desempenho por disciplina</h2>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {metrics.bySubject.map(s=>(
+                  <div key={s.name} className="px-6 py-4 flex items-center gap-6">
+                    <p className="font-semibold text-gray-900 w-48 shrink-0 truncate">{s.name}</p>
+                    <div className="flex-1 grid grid-cols-3 gap-4 text-sm text-center">
+                      <div><p className="text-gray-400 text-xs">Total</p><p className="font-bold">{s.total}</p></div>
+                      <div><p className="text-gray-400 text-xs">Pendentes</p><p className="font-bold text-red-600">{s.pending}</p></div>
+                      <div><p className="text-gray-400 text-xs">Resolvidos</p><p className="font-bold text-green-600">{s.resolved}</p></div>
+                    </div>
+                    <div className="w-32 shrink-0">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Progresso</span><span>{s.total>0?Math.round((s.resolved/s.total)*100):0}%</span></div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-green-500 rounded-full" style={{width:`${s.total>0?Math.round((s.resolved/s.total)*100):0}%`}}/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {metrics.bySubject.length===0&&<div className="text-center py-8 text-gray-400">Nenhum dado ainda.</div>}
+              </div>
+            </div>
+
+            {/* Distribuição por tipo de erro */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <h2 className="font-bold text-gray-900 mb-4">Distribuição por tipo de erro</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {ERROR_TYPES.map(et=>{
+                  const count = notes.filter(n=>n.errorType===et.value).length;
+                  const pct = notes.length>0?Math.round((count/notes.length)*100):0;
+                  return (
+                    <div key={et.value} className="bg-gray-50 rounded-xl p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xl">{et.emoji}</span>
+                        <p className="text-xs font-semibold text-gray-700">{et.label}</p>
+                      </div>
+                      <p className="text-2xl font-bold text-gray-900">{count}</p>
+                      <div className="h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-gray-700 rounded-full" style={{width:`${pct}%`}}/>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{pct}%</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── ABA: PESQUISA ──────────────────────────────────────────────────── */}
+        {tab==="pesquisa"&&(
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Buscar por palavra-chave</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-3.5 w-4 h-4 text-gray-400"/>
+                <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} placeholder="Ex: tributo, pegadinha, FGV, imposto..."
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+              </div>
+              {searchQuery&&<p className="text-xs text-gray-500 mt-2">{searchResults.length} resultado{searchResults.length!==1?"s":""} encontrado{searchResults.length!==1?"s":""}</p>}
+            </div>
+            <div className="space-y-3">
+              {searchQuery&&searchResults.length===0&&(
+                <div className="text-center py-12 text-gray-400">Nenhum resultado para "{searchQuery}".</div>
+              )}
+              {searchResults.map(n=><NoteCard key={n.id} n={n}/>)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
