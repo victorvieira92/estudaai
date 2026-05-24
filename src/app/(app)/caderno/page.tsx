@@ -29,7 +29,29 @@ function stripHtml(html: string) { return html?.replace(/<[^>]*>/g, "") ?? ""; }
 
 function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; minRows?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const exec = (cmd: string, val?: string) => { document.execCommand(cmd, false, val); if (ref.current) onChange(ref.current.innerHTML); };
+  const initialized = useRef(false);
+
+  // Inicializa o conteúdo apenas uma vez — nunca atualiza via prop para não mover cursor
+  useEffect(() => {
+    if (ref.current && !initialized.current) {
+      ref.current.innerHTML = value;
+      initialized.current = true;
+    }
+  }, []);
+
+  // Quando value é zerado externamente (após submit), limpa o editor
+  useEffect(() => {
+    if (ref.current && value === "" && initialized.current) {
+      ref.current.innerHTML = "";
+    }
+  }, [value]);
+
+  const exec = (cmd: string, val?: string) => {
+    ref.current?.focus();
+    document.execCommand(cmd, false, val);
+    if (ref.current) onChange(ref.current.innerHTML);
+  };
+
   return (
     <div className="border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-gray-900">
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-gray-50 flex-wrap">
@@ -48,10 +70,15 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         <div className="w-px h-5 bg-gray-300 mx-1"/>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("removeFormat")}} className="px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200 rounded">✕</button>
       </div>
-      <div ref={ref} contentEditable suppressContentEditableWarning data-placeholder={placeholder}
-        onInput={()=>{if(ref.current) onChange(ref.current.innerHTML)}}
-        className="px-4 py-3 text-sm text-gray-900 focus:outline-none" style={{minHeight:`${minRows*28}px`}}
-        dangerouslySetInnerHTML={{__html:value}}/>
+      <div
+        ref={ref}
+        contentEditable
+        suppressContentEditableWarning
+        data-placeholder={placeholder}
+        onInput={()=>{ if(ref.current) onChange(ref.current.innerHTML); }}
+        className="px-4 py-3 text-sm text-gray-900 focus:outline-none"
+        style={{minHeight:`${minRows*28}px`}}
+      />
       <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;}`}</style>
     </div>
   );
@@ -263,11 +290,11 @@ export default function CadernoPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Questão / Título</label>
-              <RichEditor value={editTitle} onChange={setEditTitle} minRows={2}/>
+              <RichEditor key={`edit-title-${editingNote?.id}`} value={editTitle} onChange={setEditTitle} minRows={2}/>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Explicação</label>
-              <RichEditor value={editDesc} onChange={setEditDesc} minRows={4}/>
+              <RichEditor key={`edit-desc-${editingNote?.id}`} value={editDesc} onChange={setEditDesc} minRows={4}/>
             </div>
             <div className="flex gap-2 pt-1">
               <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
