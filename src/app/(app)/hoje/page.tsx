@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Clock, BookOpen, RefreshCw, AlertCircle,
-  Target, ArrowRight, CheckCircle, Zap,
+  Clock, RefreshCw, AlertCircle,
+  Target, ArrowRight, CheckCircle, Zap, History,
 } from "lucide-react";
 
 interface Block {
@@ -17,18 +17,32 @@ interface Block {
     score: number;
     nextPdf: { title: string } | null;
     pendingErrors: number;
-    accuracy: number | null; // ✅ null quando sem dados
+    accuracy: number | null;
   } | null;
 }
+
+// ✅ NOVO: histórico de sessões do dia
+interface SessionHistory {
+  id:          string;
+  subjectName: string;
+  subjectId:   string;
+  hours:       number;
+  questions:   number;
+  correct:     number;
+  wrong:       number;
+  createdAt:   string;
+}
+
 interface Review    { id: string; type: string; pdf: { title: string; topic: { subject: { name: string } } } }
 interface ErrorNote { id: string; title: string; wrongCount: number; subject: { name: string } }
-interface Stats     { hours: number; questions: number; targetHours?: number; targetQuestions?: number; }
+
 interface Data {
   todayBlocks:    Block[];
+  todayHistory:   SessionHistory[];  // ✅ NOVO
   reviews:        Review[];
   criticalErrors: ErrorNote[];
-  todayStats:     Stats;
-  weekStats:      Stats & { targetHours: number; targetQuestions: number };
+  todayStats:     { hours: number; questions: number };
+  weekStats:      { hours: number; questions: number; targetHours: number };
   nextSubject:    { id: string; name: string; score: number; nextPdf: { title: string } | null } | null;
   weekDay:        number;
 }
@@ -41,6 +55,18 @@ const DAYS = [
 function pct(v: number, t: number) {
   if (!t) return 0;
   return Math.min(100, Math.round((v / t) * 100));
+}
+
+function fmtHours(h: number): string {
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) return `${totalMin}min`;
+  const hh = Math.floor(totalMin / 60);
+  const mm  = totalMin % 60;
+  return mm > 0 ? `${hh}h${mm}min` : `${hh}h`;
+}
+
+function fmtTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function HojePage() {
@@ -70,6 +96,8 @@ export default function HojePage() {
 
   const today   = new Date();
   const dateStr = today.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
+  const hoursTarget = data.weekStats.targetHours;
+  const hoursProgress = pct(data.weekStats.hours, hoursTarget);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -85,10 +113,10 @@ export default function HojePage() {
         {/* KPIs de hoje */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Horas hoje",         value: `${data.todayStats.hours.toFixed(1)}h`, icon: Clock,        color: "text-blue-600" },
-            { label: "Questões hoje",       value: data.todayStats.questions,              icon: Target,       color: "text-purple-600" },
-            { label: "Revisões pendentes",  value: data.reviews.length,                    icon: RefreshCw,    color: data.reviews.length      > 0 ? "text-red-600"    : "text-green-600" },
-            { label: "Erros críticos",      value: data.criticalErrors.length,             icon: AlertCircle,  color: data.criticalErrors.length > 0 ? "text-orange-600" : "text-green-600" },
+            { label: "Horas hoje",        value: `${data.todayStats.hours.toFixed(1)}h`, icon: Clock,       color: "text-blue-600"   },
+            { label: "Questões hoje",     value: data.todayStats.questions,              icon: Target,      color: "text-purple-600" },
+            { label: "Revisões pendentes",value: data.reviews.length,                    icon: RefreshCw,   color: data.reviews.length       > 0 ? "text-red-600"    : "text-green-600" },
+            { label: "Erros críticos",    value: data.criticalErrors.length,             icon: AlertCircle, color: data.criticalErrors.length > 0 ? "text-orange-600" : "text-green-600" },
           ].map(({ label, value, icon: Icon, color }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-200 p-4">
               <div className="flex items-center gap-2 mb-1">
@@ -100,39 +128,50 @@ export default function HojePage() {
           ))}
         </div>
 
-        {/* Progresso semanal */}
+        {/* Progresso semanal — só horas, sem meta de questões */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
           <h2 className="text-lg font-semibold mb-4">Progresso da semana</h2>
-          <div className="grid grid-cols-2 gap-6">
-            {[
-              { label: "Horas",    current: data.weekStats.hours,     target: data.weekStats.targetHours,     unit: "h" },
-              { label: "Questões", current: data.weekStats.questions,  target: data.weekStats.targetQuestions, unit: ""  },
-            ].map(({ label, current, target, unit }) => {
-              const p = pct(current, target);
-              return (
-                <div key={label}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-700">{label}</span>
-                    <span className="text-gray-500">
-                      {unit === "h" ? current.toFixed(1) : current}{unit} / {target}{unit}
-                    </span>
-                  </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width:           `${p}%`,
-                        backgroundColor: p >= 100 ? "#10B981" : p >= 60 ? "#3B82F6" : "#111827",
-                      }}
-                    />
-                  </div>
-                  <p className={`text-xs mt-1 font-medium ${p >= 100 ? "text-green-600" : "text-gray-500"}`}>
-                    {p}% da meta {p >= 100 ? "✓" : ""}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+          {hoursTarget > 0 ? (
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="font-medium text-gray-700">Horas</span>
+                <span className="text-gray-500">
+                  {data.weekStats.hours.toFixed(1)}h / {hoursTarget.toFixed(1)}h
+                </span>
+              </div>
+              <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width:           `${hoursProgress}%`,
+                    backgroundColor: hoursProgress >= 100 ? "#10B981"
+                                   : hoursProgress >= 60  ? "#3B82F6"
+                                   : "#111827",
+                  }}
+                />
+              </div>
+              <p className={`text-xs mt-1 font-medium ${hoursProgress >= 100 ? "text-green-600" : "text-gray-500"}`}>
+                {hoursProgress}% da meta {hoursProgress >= 100 ? "✓" : ""}
+              </p>
+
+              {/* Questões da semana — exibe sempre, sem barra de meta */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
+                <span className="text-sm font-medium text-gray-700">Questões</span>
+                <span className="text-sm font-semibold text-gray-900">
+                  {data.weekStats.questions} resolvidas esta semana
+                </span>
+              </div>
+            </div>
+          ) : (
+            // Sem blocos configurados = sem meta de horas
+            <p className="text-sm text-gray-400">
+              Configure seu{" "}
+              <Link href="/calendario-ciclo" className="text-blue-600 hover:underline">
+                calendário semanal
+              </Link>{" "}
+              para ver o progresso de horas aqui.
+            </p>
+          )}
         </div>
 
         {/* Próxima ação recomendada */}
@@ -148,13 +187,84 @@ export default function HojePage() {
             {data.nextSubject.nextPdf && (
               <p className="text-gray-400 text-sm mb-4">📄 {data.nextSubject.nextPdf.title}</p>
             )}
-            {/* ✅ Passa ?subjectId= para pré-preencher a Sessão de Estudo */}
             <Link
               href={`/sessao?subjectId=${data.nextSubject.id}`}
               className="inline-flex items-center gap-2 bg-white text-gray-900 font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-gray-100 transition-colors"
             >
               Começar agora <ArrowRight className="w-4 h-4" />
             </Link>
+          </div>
+        )}
+
+        {/* ✅ NOVO: Histórico de sessões do dia */}
+        {data.todayHistory && data.todayHistory.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <History className="w-5 h-5 text-gray-400" />
+              O que você já estudou hoje
+            </h2>
+            <div className="space-y-3">
+              {data.todayHistory.map((s, i) => {
+                const accuracy = s.questions > 0
+                  ? Math.round((s.correct / s.questions) * 100)
+                  : null;
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center justify-between gap-4 p-4 bg-green-50 border border-green-100 rounded-xl"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-600 text-white rounded-lg flex items-center justify-center text-xs font-bold shrink-0">
+                        {i + 1}
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900 text-sm">{s.subjectName}</p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <span className="text-xs text-gray-500">
+                            ⏱ {fmtHours(s.hours)}
+                          </span>
+                          {s.questions > 0 && (
+                            <span className="text-xs text-gray-500">
+                              • {s.questions} questões
+                            </span>
+                          )}
+                          {accuracy !== null && (
+                            <span className={`text-xs font-medium ${
+                              accuracy >= 70 ? "text-green-600"
+                              : accuracy >= 50 ? "text-yellow-600"
+                              : "text-red-600"
+                            }`}>
+                              • {accuracy}% acerto
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">
+                            • {fmtTime(s.createdAt)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Continuar estudando a mesma disciplina */}
+                    <Link
+                      href={`/sessao?subjectId=${s.subjectId}`}
+                      className="shrink-0 text-xs text-green-700 bg-green-100 hover:bg-green-200 px-3 py-1.5 rounded-lg font-medium transition-colors"
+                    >
+                      Continuar
+                    </Link>
+                  </div>
+                );
+              })}
+
+              {/* Totalizador do dia */}
+              <div className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-xl border border-gray-100 mt-1">
+                <span className="text-sm text-gray-500 font-medium">Total do dia</span>
+                <div className="flex items-center gap-4 text-sm font-semibold text-gray-900">
+                  <span>⏱ {fmtHours(data.todayStats.hours)}</span>
+                  {data.todayStats.questions > 0 && (
+                    <span>📝 {data.todayStats.questions} questões</span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -177,7 +287,6 @@ export default function HojePage() {
               const done = completedBlocks.includes(i);
               const now  = new Date();
 
-              // Horários reais ou fallback gracioso
               const hasTime = block.start !== "—" && block.end !== "—";
               let isNow = false;
               let isPast = false;
@@ -194,12 +303,11 @@ export default function HojePage() {
                 <div
                   key={i}
                   className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                    done   ? "bg-green-50 border-green-200"
+                    done    ? "bg-green-50 border-green-200"
                     : isNow ? "bg-blue-50 border-blue-300 shadow-sm"
                     : "border-gray-100 bg-gray-50"
                   }`}
                 >
-                  {/* Horário */}
                   <div className="text-center shrink-0 w-20">
                     {hasTime ? (
                       <>
@@ -213,7 +321,7 @@ export default function HojePage() {
                   </div>
 
                   <div className={`w-1 h-12 rounded-full shrink-0 ${
-                    done   ? "bg-green-500"
+                    done    ? "bg-green-500"
                     : isNow ? "bg-blue-500"
                     : isPast ? "bg-gray-300"
                     : "bg-gray-200"
@@ -232,7 +340,9 @@ export default function HojePage() {
                       <>
                         <p className="font-semibold text-gray-900">{block.subject.name}</p>
                         {block.subject.nextPdf && (
-                          <p className="text-xs text-gray-500 truncate">📄 {block.subject.nextPdf.title}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            📄 {block.subject.nextPdf.title}
+                          </p>
                         )}
                         <div className="flex gap-3 mt-1">
                           {block.subject.pendingErrors > 0 && (
@@ -240,7 +350,6 @@ export default function HojePage() {
                               {block.subject.pendingErrors} erros pendentes
                             </span>
                           )}
-                          {/* ✅ Exibe "—" quando accuracy é null, nunca "50% acerto" */}
                           <span className="text-xs text-gray-400">
                             {block.subject.accuracy !== null
                               ? `${block.subject.accuracy}% acerto`
@@ -253,7 +362,6 @@ export default function HojePage() {
                     )}
                   </div>
 
-                  {/* ✅ Botão Começar por bloco — também passa ?subjectId= */}
                   {block.subject && !done && (
                     <Link
                       href={`/sessao?subjectId=${block.subject.id}`}
