@@ -30,8 +30,9 @@ function stripHtml(html: string) { return html?.replace(/<[^>]*>/g, "") ?? ""; }
 function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; minRows?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
+  const paintFormat = useRef<{ color: string; bold: boolean; italic: boolean; underline: boolean; fontSize: string } | null>(null);
+  const [painting, setPainting] = useState(false);
 
-  // Inicializa o conteúdo apenas uma vez — nunca atualiza via prop para não mover cursor
   useEffect(() => {
     if (ref.current && !initialized.current) {
       ref.current.innerHTML = value;
@@ -39,7 +40,6 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
     }
   }, []);
 
-  // Quando value é zerado externamente (após submit), limpa o editor
   useEffect(() => {
     if (ref.current && value === "" && initialized.current) {
       ref.current.innerHTML = "";
@@ -52,12 +52,55 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
     if (ref.current) onChange(ref.current.innerHTML);
   };
 
+  const handlePaintClick = () => {
+    if (!painting) {
+      // Captura formatação da seleção atual
+      const color = document.queryCommandValue("foreColor");
+      const bold = document.queryCommandState("bold");
+      const italic = document.queryCommandState("italic");
+      const underline = document.queryCommandState("underline");
+      const fontSize = document.queryCommandValue("fontSize");
+      paintFormat.current = { color, bold, italic, underline, fontSize };
+      setPainting(true);
+    } else {
+      setPainting(false);
+      paintFormat.current = null;
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (painting && paintFormat.current) {
+      const sel = window.getSelection();
+      if (sel && sel.toString().length > 0) {
+        const fmt = paintFormat.current;
+        if (fmt.bold)      document.execCommand("bold", false);
+        if (fmt.italic)    document.execCommand("italic", false);
+        if (fmt.underline) document.execCommand("underline", false);
+        if (fmt.color)     document.execCommand("foreColor", false, fmt.color);
+        if (fmt.fontSize)  document.execCommand("fontSize", false, fmt.fontSize);
+        if (ref.current) onChange(ref.current.innerHTML);
+        setPainting(false);
+        paintFormat.current = null;
+      }
+    }
+  };
+
   return (
     <div className="border border-gray-300 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-gray-900">
       <div className="flex items-center gap-1 px-3 py-2 border-b border-gray-200 bg-gray-50 flex-wrap">
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("bold")}} className="w-7 h-7 flex items-center justify-center font-bold text-sm hover:bg-gray-200 rounded">B</button>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("italic")}} className="w-7 h-7 flex items-center justify-center italic text-sm hover:bg-gray-200 rounded">I</button>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("underline")}} className="w-7 h-7 flex items-center justify-center underline text-sm hover:bg-gray-200 rounded">U</button>
+        {/* Pincel de formatação */}
+        <button
+          type="button"
+          onMouseDown={e => { e.preventDefault(); handlePaintClick(); }}
+          title="Copiar formatação (Format Painter)"
+          className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${painting ? "bg-blue-100 text-blue-700 ring-2 ring-blue-400" : "hover:bg-gray-200 text-gray-600"}`}>
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
+            <path d="M13.5 2a1.5 1.5 0 0 1 1.415 2H15a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-1.5v1.25a.75.75 0 0 1-.75.75h-.5v5.25a.75.75 0 0 1-1.5 0V11h-.5a.75.75 0 0 1-.75-.75V9H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h.085A1.5 1.5 0 0 1 7.5 2h6Z"/>
+          </svg>
+        </button>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
         {COLORS.map(c=>(
           <button key={c} type="button" onMouseDown={e=>{e.preventDefault();exec("foreColor",c)}} className="w-5 h-5 rounded-full border-2 border-white shadow-sm hover:scale-110 transition-transform" style={{backgroundColor:c}}/>
@@ -76,7 +119,8 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         suppressContentEditableWarning
         data-placeholder={placeholder}
         onInput={()=>{ if(ref.current) onChange(ref.current.innerHTML); }}
-        className="px-4 py-3 text-sm text-gray-900 focus:outline-none"
+        onMouseUp={handleMouseUp}
+        className={`px-4 py-3 text-sm text-gray-900 focus:outline-none ${painting ? "cursor-crosshair" : ""}`}
         style={{minHeight:`${minRows*28}px`}}
       />
       <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;}`}</style>
@@ -85,6 +129,213 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
 }
 
 type Tab = "cadernos" | "registrar" | "evolucao" | "pesquisa";
+
+// ── Componente de Evolução ────────────────────────────────────────────────────
+function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
+  const [expandedSub, setExpandedSub] = useState<string | null>(null);
+
+  // Gráfico de barras simples sem dependências externas
+  const SubjectChart = ({ subNotes }: { subNotes: ErrorNote[] }) => {
+    const data = ERROR_TYPES.map(et => ({
+      label: et.label, emoji: et.emoji,
+      count: subNotes.filter(n => n.errorType === et.value).length,
+    }));
+    const max = Math.max(...data.map(d => d.count), 1);
+    return (
+      <div className="mt-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Erros por tipo</p>
+        <div className="flex items-end gap-2 h-32">
+          {data.map(d => (
+            <div key={d.label} className="flex-1 flex flex-col items-center gap-1">
+              <span className="text-xs font-bold text-gray-700">{d.count > 0 ? d.count : ""}</span>
+              <div className="w-full bg-gray-100 rounded-t-lg overflow-hidden flex items-end" style={{ height: "80px" }}>
+                <div className="w-full rounded-t-lg transition-all"
+                  style={{ height: `${Math.round((d.count / max) * 100)}%`, backgroundColor: d.count > 0 ? (d.count === Math.max(...data.map(x => x.count)) ? "#dc2626" : "#6b7280") : "#e5e7eb" }}/>
+              </div>
+              <span className="text-lg" title={d.label}>{d.emoji}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {data.filter(d => d.count > 0).sort((a,b) => b.count - a.count).map(d => (
+            <span key={d.label} className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">
+              {d.emoji} {d.label}: {d.count}
+            </span>
+          ))}
+          {data.every(d => d.count === 0) && <span className="text-xs text-gray-400">Nenhum tipo de erro classificado.</span>}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* KPIs globais */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {[
+          { label: "Total de erros",    value: notes.length,           color: "text-gray-900" },
+          { label: "Pendentes",         value: metrics.pending,        color: "text-red-600" },
+          { label: "Resolvidos",        value: metrics.resolved,       color: "text-green-600" },
+          { label: "Total de revisões", value: metrics.totalReviews,   color: "text-blue-600" },
+          { label: "Taxa de acerto",    value: `${metrics.taxaAcerto}%`, color: metrics.taxaAcerto >= 70 ? "text-green-600" : metrics.taxaAcerto >= 50 ? "text-yellow-600" : "text-red-600" },
+        ].map(({ label, value, color }) => (
+          <div key={label} className="bg-white rounded-2xl border border-gray-200 p-5 text-center">
+            <p className="text-xs text-gray-400 mb-2">{label}</p>
+            <p className={`text-3xl font-bold ${color}`}>{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Gráfico global de tipos de erro */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-6">
+        <h2 className="font-bold text-gray-900 mb-1">Distribuição global por tipo de erro</h2>
+        <p className="text-xs text-gray-400 mb-4">Seu maior padrão de erro em todas as disciplinas</p>
+        <div className="flex items-end gap-3 h-40">
+          {ERROR_TYPES.map(et => {
+            const count = notes.filter(n => n.errorType === et.value).length;
+            const pct = notes.length > 0 ? Math.round((count / notes.length) * 100) : 0;
+            const max = Math.max(...ERROR_TYPES.map(e => notes.filter(n => n.errorType === e.value).length), 1);
+            const isTop = count === max && count > 0;
+            return (
+              <div key={et.value} className="flex-1 flex flex-col items-center gap-1">
+                <span className="text-xs font-bold text-gray-700">{count > 0 ? count : ""}</span>
+                <div className="w-full bg-gray-100 rounded-t-xl overflow-hidden flex items-end" style={{ height: "96px" }}>
+                  <div className="w-full rounded-t-xl transition-all"
+                    style={{ height: `${Math.round((count / max) * 100)}%`, backgroundColor: isTop ? "#dc2626" : count > 0 ? "#6b7280" : "#f3f4f6" }}/>
+                </div>
+                <span className="text-xl" title={et.label}>{et.emoji}</span>
+                <span className="text-xs text-gray-400 text-center leading-tight hidden md:block" style={{ fontSize: "10px" }}>{et.label}</span>
+                {pct > 0 && <span className="text-xs font-semibold text-gray-600">{pct}%</span>}
+              </div>
+            );
+          })}
+        </div>
+        {notes.length === 0 && <p className="text-center text-gray-400 text-sm mt-4">Nenhum erro registrado ainda.</p>}
+      </div>
+
+      {/* Pastinhas por disciplina */}
+      <div>
+        <h2 className="font-bold text-gray-900 mb-3">Análise por disciplina</h2>
+        <div className="space-y-3">
+          {metrics.bySubject.length === 0 && (
+            <div className="text-center py-8 text-gray-400">Nenhum dado ainda.</div>
+          )}
+          {metrics.bySubject.map((s: any) => {
+            const subNotes = notes.filter(n => n.subject.name === s.name);
+            const isOpen = expandedSub === s.name;
+            const progresso = s.total > 0 ? Math.round((s.resolved / s.total) * 100) : 0;
+            const topError = ERROR_TYPES.reduce((best, et) => {
+              const c = subNotes.filter(n => n.errorType === et.value).length;
+              return c > best.count ? { label: et.label, emoji: et.emoji, count: c } : best;
+            }, { label: "", emoji: "", count: 0 });
+            const pendingCritical = subNotes.filter(n => !n.resolved && n.difficulty === "Alta").length;
+
+            return (
+              <div key={s.name} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                {/* Header da pastinha */}
+                <button onClick={() => setExpandedSub(isOpen ? null : s.name)}
+                  className="w-full px-6 py-5 flex items-center gap-4 hover:bg-gray-50 transition-colors text-left">
+                  {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400 shrink-0"/> : <ChevronRight className="w-5 h-5 text-gray-400 shrink-0"/>}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-gray-900">{s.name}</p>
+                    <div className="flex items-center gap-3 mt-1 flex-wrap">
+                      <span className="text-xs text-gray-500">{s.total} erros</span>
+                      {pendingCritical > 0 && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{pendingCritical} crítico{pendingCritical > 1 ? "s" : ""}</span>}
+                      {topError.count > 0 && <span className="text-xs text-gray-500">Principal erro: {topError.emoji} {topError.label}</span>}
+                    </div>
+                  </div>
+                  {/* Mini métricas */}
+                  <div className="hidden md:flex items-center gap-6 shrink-0">
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Pendentes</p>
+                      <p className="font-bold text-red-600">{s.pending}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-gray-400">Resolvidos</p>
+                      <p className="font-bold text-green-600">{s.resolved}</p>
+                    </div>
+                    <div className="w-28">
+                      <div className="flex justify-between text-xs text-gray-400 mb-1">
+                        <span>Progresso</span><span>{progresso}%</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${progresso}%`, backgroundColor: progresso >= 70 ? "#16a34a" : progresso >= 40 ? "#ca8a04" : "#dc2626" }}/>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Conteúdo expandido */}
+                {isOpen && (
+                  <div className="border-t border-gray-100 px-6 pb-6">
+                    <div className="grid md:grid-cols-2 gap-6 mt-4">
+                      {/* Gráfico de tipos */}
+                      <div>
+                        <SubjectChart subNotes={subNotes}/>
+                      </div>
+                      {/* Métricas detalhadas */}
+                      <div className="space-y-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detalhes</p>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { label: "Total de erros",  value: s.total,    color: "text-gray-900" },
+                            { label: "Pendentes",       value: s.pending,  color: "text-red-600" },
+                            { label: "Resolvidos",      value: s.resolved, color: "text-green-600" },
+                            { label: "Críticos",        value: pendingCritical, color: "text-orange-600" },
+                          ].map(({ label, value, color }) => (
+                            <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                              <p className="text-xs text-gray-400">{label}</p>
+                              <p className={`text-2xl font-bold ${color} mt-1`}>{value}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Dificuldades */}
+                        <div className="space-y-2">
+                          {[["Alta","bg-red-500"],["Media","bg-yellow-400"],["Baixa","bg-green-500"]].map(([d, color]) => {
+                            const c = subNotes.filter(n => n.difficulty === d).length;
+                            const p = s.total > 0 ? Math.round((c / s.total) * 100) : 0;
+                            return (
+                              <div key={d}>
+                                <div className="flex justify-between text-xs text-gray-500 mb-1"><span>Dificuldade {d}</span><span>{c} ({p}%)</span></div>
+                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className={`h-full rounded-full ${color}`} style={{ width: `${p}%` }}/>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Tópicos com mais erros */}
+                        {(() => {
+                          const byTopic: Record<string, number> = {};
+                          subNotes.forEach(n => { const t = n.topic || "Sem tópico"; byTopic[t] = (byTopic[t] || 0) + 1; });
+                          const sorted = Object.entries(byTopic).sort((a, b) => b[1] - a[1]).slice(0, 4);
+                          if (!sorted.length) return null;
+                          return (
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Tópicos com mais erros</p>
+                              <div className="space-y-1.5">
+                                {sorted.map(([t, c]) => (
+                                  <div key={t} className="flex items-center justify-between">
+                                    <span className="text-xs text-gray-700 truncate max-w-[160px]">{t}</span>
+                                    <span className="text-xs font-bold text-gray-900 shrink-0 ml-2">{c}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function CadernoPage() {
   const [tab, setTab] = useState<Tab>("cadernos");
@@ -461,72 +712,7 @@ export default function CadernoPage() {
         )}
 
         {/* ── ABA: EVOLUÇÃO ──────────────────────────────────────────────────── */}
-        {tab==="evolucao"&&(
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                ["Total de erros", notes.length, "text-gray-900"],
-                ["Resolvidos", metrics.resolved, "text-green-600"],
-                ["Total de revisões", metrics.totalReviews, "text-blue-600"],
-                ["Taxa de acerto", `${metrics.taxaAcerto}%`, metrics.taxaAcerto>=70?"text-green-600":metrics.taxaAcerto>=50?"text-yellow-600":"text-red-600"],
-              ].map(([l,v,c])=>(
-                <div key={l as string} className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
-                  <p className="text-xs text-gray-400 mb-2">{l}</p>
-                  <p className={`text-4xl font-bold ${c}`}>{v}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100">
-                <h2 className="font-bold text-gray-900">Desempenho por disciplina</h2>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {metrics.bySubject.map(s=>(
-                  <div key={s.name} className="px-6 py-4 flex items-center gap-6">
-                    <p className="font-semibold text-gray-900 w-48 shrink-0 truncate">{s.name}</p>
-                    <div className="flex-1 grid grid-cols-3 gap-4 text-sm text-center">
-                      <div><p className="text-gray-400 text-xs">Total</p><p className="font-bold">{s.total}</p></div>
-                      <div><p className="text-gray-400 text-xs">Pendentes</p><p className="font-bold text-red-600">{s.pending}</p></div>
-                      <div><p className="text-gray-400 text-xs">Resolvidos</p><p className="font-bold text-green-600">{s.resolved}</p></div>
-                    </div>
-                    <div className="w-32 shrink-0">
-                      <div className="flex justify-between text-xs text-gray-400 mb-1"><span>Progresso</span><span>{s.total>0?Math.round((s.resolved/s.total)*100):0}%</span></div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-green-500 rounded-full" style={{width:`${s.total>0?Math.round((s.resolved/s.total)*100):0}%`}}/>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {metrics.bySubject.length===0&&<div className="text-center py-8 text-gray-400">Nenhum dado ainda.</div>}
-              </div>
-            </div>
-
-            {/* Distribuição por tipo de erro */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-6">
-              <h2 className="font-bold text-gray-900 mb-4">Distribuição por tipo de erro</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {ERROR_TYPES.map(et=>{
-                  const count = notes.filter(n=>n.errorType===et.value).length;
-                  const pct = notes.length>0?Math.round((count/notes.length)*100):0;
-                  return (
-                    <div key={et.value} className="bg-gray-50 rounded-xl p-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-xl">{et.emoji}</span>
-                        <p className="text-xs font-semibold text-gray-700">{et.label}</p>
-                      </div>
-                      <p className="text-2xl font-bold text-gray-900">{count}</p>
-                      <div className="h-1.5 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-gray-700 rounded-full" style={{width:`${pct}%`}}/>
-                      </div>
-                      <p className="text-xs text-gray-400 mt-1">{pct}%</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
+        {tab==="evolucao"&&<EvolucaoTab notes={notes} metrics={metrics}/>}
 
         {/* ── ABA: PESQUISA ──────────────────────────────────────────────────── */}
         {tab==="pesquisa"&&(
