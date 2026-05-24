@@ -3,9 +3,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
-  LayoutDashboard, Sun, BookOpen, RefreshCw, Brain,
+  LayoutDashboard, Sun, BookOpen, RefreshCw,
   FileText, BarChart2, CalendarDays, Zap, LogOut, Target,
-  UserCircle, FolderOpen, TrendingUp, MessageSquare
+  UserCircle, FolderOpen, TrendingUp, MessageSquare, ExternalLink
 } from "lucide-react";
 
 const nav = [
@@ -17,8 +17,6 @@ const nav = [
   { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp },
   { href: "/materias",         label: "Materias",          icon: Target },
   { href: "/revisoes",         label: "Revisoes",          icon: RefreshCw },
-  { href: "/flashcards",       label: "Flashcards",        icon: Brain },
-  { href: "/flashcards/novo",  label: "Gerenciar Cards",   icon: Brain },
   { href: "/caderno",          label: "Caderno de Erros",  icon: FileText },
   { href: "/resumos",          label: "Resumos",           icon: FolderOpen },
   { href: "/estatisticas",     label: "Estatisticas",      icon: BarChart2 },
@@ -47,7 +45,18 @@ export function Sidebar() {
             </Link>
           );
         })}
+
         <div className="pt-2 pb-1"><div className="border-t border-gray-800"/></div>
+
+        {/* Anki — link externo */}
+        <a href="https://ankiweb.net/decks" target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-gray-400 hover:text-white hover:bg-gray-800">
+          <ExternalLink className="w-4 h-4 shrink-0"/>
+          <span>Anki</span>
+          <span className="ml-auto text-[10px] text-gray-600">↗</span>
+        </a>
+
+        {/* StudyChat — link externo */}
         <a href="https://studychat-production-9f95.up.railway.app/" target="_blank" rel="noopener noreferrer"
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-gray-400 hover:text-white hover:bg-gray-800">
           <MessageSquare className="w-4 h-4 shrink-0"/>
