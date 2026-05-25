@@ -16,7 +16,6 @@ function formatHours(h: number): string {
   return mm > 0 ? `${hh}h${mm}min` : `${hh}h`;
 }
 
-// Extrai metadata do campo notes (JSON com category, topicName, pdfTitle, comment)
 function parseMeta(notes: string | null): { category: string; topicName: string; pdfTitle: string; comment: string } {
   if (!notes) return { category: "", topicName: "", pdfTitle: "", comment: "" };
   try {
@@ -28,7 +27,6 @@ function parseMeta(notes: string | null): { category: string; topicName: string;
       comment:   parsed.comment   ?? "",
     };
   } catch {
-    // Campo notes com texto simples (sessões antigas)
     return { category: "", topicName: "", pdfTitle: "", comment: notes };
   }
 }
@@ -73,7 +71,6 @@ export async function GET() {
         wrong:          s.wrong,
         accuracy:       s.questions > 0 ? Math.round((s.correct / s.questions) * 100) : null,
         createdAt:      s.createdAt.toISOString(),
-        // Metadata do campo notes
         category:       meta.category,
         topicName:      meta.topicName,
         pdfTitle:       meta.pdfTitle,
@@ -85,29 +82,49 @@ export async function GET() {
   return NextResponse.json(result);
 }
 
-// PATCH — editar observação de uma sessão
+// PATCH — editar campos da sessão (categoria, tempo, questões, tópico, material, comentário)
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
-  const { id, comment } = await req.json();
+  const body = await req.json();
+  const { id, category, topicName, pdfTitle, comment, hours, correct, wrong } = body;
+
   const existing = await prisma.studySession.findFirst({
     where: { id, userId: session.user.id as string },
   });
   if (!existing) return NextResponse.json({ message: "Não encontrado." }, { status: 404 });
 
+  // Atualiza metadata no campo notes
   const meta = parseMeta(existing.notes);
-  meta.comment = comment ?? "";
+  if (category  !== undefined) meta.category  = category;
+  if (topicName !== undefined) meta.topicName = topicName;
+  if (pdfTitle  !== undefined) meta.pdfTitle  = pdfTitle;
+  if (comment   !== undefined) meta.comment   = comment;
 
-  await prisma.studySession.update({
-    where: { id },
-    data:  { notes: JSON.stringify(meta) },
-  });
+  // Campos numéricos do banco
+  const updateData: Record<string, unknown> = { notes: JSON.stringify(meta) };
+
+  if (hours !== undefined && hours > 0) {
+    updateData.studyHours = parseFloat(hours.toFixed(4));
+    updateData.duration   = Math.max(1, Math.round(hours * 60));
+  }
+  if (correct !== undefined) updateData.correct   = parseInt(correct) || 0;
+  if (wrong   !== undefined) updateData.wrong     = parseInt(wrong)   || 0;
+  if (correct !== undefined || wrong !== undefined) {
+    const c = parseInt(correct ?? existing.correct) || 0;
+    const w = parseInt(wrong   ?? existing.wrong)   || 0;
+    updateData.questions = c + w;
+    updateData.correct   = c;
+    updateData.wrong     = w;
+  }
+
+  await prisma.studySession.update({ where: { id }, data: updateData });
 
   return NextResponse.json({ ok: true });
 }
 
-// DELETE — excluir uma sessão
+// DELETE — excluir sessão
 export async function DELETE(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
