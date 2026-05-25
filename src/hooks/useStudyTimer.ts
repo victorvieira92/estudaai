@@ -3,41 +3,65 @@ import { useState, useEffect, useRef, useCallback } from "react";
 
 export type TimerState = "idle" | "running" | "paused";
 
-export function useStudyTimer() {
-  const [state, setState] = useState<TimerState>("idle");
-  const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const startedAtRef = useRef<number>(0);
-  const accumulatedRef = useRef<number>(0);
+const STORAGE_KEY = "estudaai_timer";
 
-  const clear = () => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-  };
+interface PersistedTimer {
+  state:       TimerState;
+  accumulated: number;
+  startedAt:   number | null;
+}
+
+function load(): PersistedTimer {
+  if (typeof window === "undefined") return { state: "idle", accumulated: 0, startedAt: null };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { state: "idle", accumulated: 0, startedAt: null };
+    return JSON.parse(raw) as PersistedTimer;
+  } catch { return { state: "idle", accumulated: 0, startedAt: null }; }
+}
+
+function save(data: PersistedTimer) {
+  if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function clear() {
+  if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+}
+
+function calcElapsed(p: PersistedTimer): number {
+  let total = p.accumulated;
+  if (p.state === "running" && p.startedAt)
+    total += Math.floor((Date.now() - p.startedAt) / 1000);
+  return total;
+}
+
+export function useStudyTimer() {
+  const [persisted, setPersisted] = useState<PersistedTimer>(() => load());
+  const [elapsed, setElapsed]     = useState<number>(() => calcElapsed(load()));
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const { state } = persisted;
 
   useEffect(() => {
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     if (state === "running") {
-      startedAtRef.current = Date.now();
-      intervalRef.current = setInterval(() => {
-        setElapsed(accumulatedRef.current + Math.floor((Date.now() - startedAtRef.current) / 1000));
-      }, 500);
-    } else { clear(); }
-    return clear;
-  }, [state]);
+      intervalRef.current = setInterval(() => setElapsed(calcElapsed(persisted)), 500);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, persisted.startedAt]);
 
-  const start = useCallback(() => { accumulatedRef.current = 0; setElapsed(0); setState("running"); }, []);
-  const pause = useCallback(() => {
-    if (state !== "running") return;
-    accumulatedRef.current += Math.floor((Date.now() - startedAtRef.current) / 1000);
-    setState("paused");
-  }, [state]);
-  const resume = useCallback(() => { if (state === "paused") setState("running"); }, [state]);
-  const stop = useCallback((): number => {
-    let final = accumulatedRef.current;
-    if (state === "running") final += Math.floor((Date.now() - startedAtRef.current) / 1000);
-    clear(); accumulatedRef.current = 0; setElapsed(0); setState("idle");
-    return final;
-  }, [state]);
-  const reset = useCallback(() => { clear(); accumulatedRef.current = 0; setElapsed(0); setState("idle"); }, []);
+  useEffect(() => {
+    const p = load(); setPersisted(p); setElapsed(calcElapsed(p));
+  }, []);
+
+  const update = (next: PersistedTimer) => { save(next); setPersisted(next); setElapsed(calcElapsed(next)); };
+
+  const start  = useCallback(() => update({ state: "running", accumulated: 0, startedAt: Date.now() }), []);
+  const pause  = useCallback(() => { if (state !== "running") return; update({ state: "paused", accumulated: calcElapsed(persisted), startedAt: null }); }, [state, persisted]);
+  const resume = useCallback(() => { if (state !== "paused") return; update({ state: "running", accumulated: persisted.accumulated, startedAt: Date.now() }); }, [state, persisted]);
+  const stop   = useCallback((): number => { const final = calcElapsed(persisted); clear(); setPersisted({ state: "idle", accumulated: 0, startedAt: null }); setElapsed(0); return final; }, [persisted]);
+  const reset  = useCallback(() => { clear(); setPersisted({ state: "idle", accumulated: 0, startedAt: null }); setElapsed(0); }, []);
 
   const hh = String(Math.floor(elapsed / 3600)).padStart(2, "0");
   const mm = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
