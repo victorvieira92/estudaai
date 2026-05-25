@@ -51,7 +51,7 @@ export function Sidebar() {
       <div
         className="flex items-center justify-center px-4 shrink-0"
         style={{
-          height: "96px",
+          height: "112px",
           borderBottom: `1px solid ${BORDER}`,
         }}
       >
