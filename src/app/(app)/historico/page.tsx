@@ -414,7 +414,7 @@ export default function HistoricoPage() {
                             )}
 
                             {/* Categoria badge */}
-                            {s.category && <CategoryBadge cat={s.category} />}
+                            <CategoryBadge cat={s.category || "Teoria"} />
 
                             {/* Botões ação */}
                             <div className="flex items-center gap-0.5 shrink-0">
