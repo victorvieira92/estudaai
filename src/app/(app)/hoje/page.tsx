@@ -75,7 +75,7 @@ export default function HojePage() {
   const [completedBlocks, setCompletedBlocks] = useState<number[]>([]);
 
   useEffect(() => {
-    fetch("/api/schedule")
+    fetch(`/api/schedule?cycleDay=${localStorage.getItem('estudaai_cycle_day') ?? '0'}`)
       .then(r => r.json())
       .then(setData)
       .catch(console.error)
@@ -102,7 +102,7 @@ export default function HojePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
+      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "120px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <p className="text-gray-400 text-sm">{DAYS[data.weekDay]}, {dateStr}</p>
         <h1 className="text-3xl font-bold mt-1">Painel do Dia</h1>
         <p className="text-gray-400 text-sm mt-1">Seu plano de estudos personalizado para hoje</p>
