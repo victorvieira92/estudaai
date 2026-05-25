@@ -2,7 +2,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, FileText,
   BarChart2, CalendarDays, Zap, LogOut, Target, UserCircle,
@@ -41,17 +41,16 @@ const HOVER  = "rgba(255,255,255,0.08)";
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
 
   return (
     <aside
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* ── Logo + nome do usuário ── */}
-      {/* py-8 = mesmo padding do header das páginas para alinhar visualmente */}
+      {/* ── Só a logo, sem nenhum texto adicional ── */}
+      {/* py-8 alinha com o header das páginas */}
       <div
-        className="flex flex-col items-center justify-center px-4 py-8"
+        className="flex items-center justify-center px-4 py-8"
         style={{ borderBottom: `1px solid ${BORDER}` }}
       >
         <Image
@@ -62,12 +61,6 @@ export function Sidebar() {
           className="object-contain w-full"
           priority
         />
-        <p
-          className="text-xs mt-2 text-center truncate w-full"
-          style={{ color: MUTED }}
-        >
-          {session?.user?.name ?? "Concurseiro"}
-        </p>
       </div>
 
       {/* ── Navegação ── */}
