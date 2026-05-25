@@ -21,10 +21,21 @@ export function addDays(date: Date, days: number): Date {
   return d;
 }
 
+// ✅ FIX: startOfToday usa fuso de Brasília (UTC-3)
+// O servidor está em Washington DC (UTC-4/UTC-5), então new Date() sem ajuste
+// causa revisões de 24h aparecerem no mesmo dia do estudo
 export function startOfToday(): Date {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+  // Pega a data atual em Brasília
+  const nowBR     = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const todayBRStr = nowBR.toISOString().slice(0, 10); // "2026-05-25"
+  // Retorna meia-noite de hoje no horário de Brasília como UTC
+  return new Date(todayBRStr + "T00:00:00-03:00");
+}
+
+// ✅ Revisão de 24h: começa amanhã às 00:00 de Brasília
+// Garante que nunca aparece no mesmo dia do estudo
+export function startOfTomorrow(): Date {
+  return addDays(startOfToday(), 1);
 }
 
 export function formatHours(h: number): string {
