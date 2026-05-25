@@ -7,11 +7,12 @@ import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, FileText,
   BarChart2, CalendarDays, Zap, LogOut, Target, UserCircle,
   FolderOpen, TrendingUp, MessageSquare, ExternalLink,
-  Cloud, GraduationCap, BookMarked,
+  Cloud, GraduationCap, BookMarked, History,
 } from "lucide-react";
 
 const nav = [
   { href: "/dashboard",        label: "Dashboard",         icon: LayoutDashboard },
+  { href: "/historico",        label: "Histórico",        icon: History },
   { href: "/hoje",             label: "Hoje",              icon: Sun },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/ciclo",            label: "Ciclo Inteligente", icon: Zap },
