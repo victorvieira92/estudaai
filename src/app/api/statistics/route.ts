@@ -133,6 +133,42 @@ export async function GET() {
       : null,
   }));
 
+  // ── Dados semanais com horas + questões (últimas 8 semanas) ──────────────
+  // Permite navegação entre semanas no gráfico do Dashboard
+  const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  
+  function getWeekData(weekOffset: number): { day: string; hours: number; questions: number }[] {
+    // weekOffset 0 = semana atual, 1 = semana passada, etc
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek - (weekOffset * 7));
+    monday.setHours(0, 0, 0, 0);
+    
+    const result = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const ds = toBRDate(d);
+      const daySessions = allSessions.filter(s => toBRDate(new Date(s.createdAt)) === ds);
+      result.push({
+        day:       DAYS_BR[d.getDay()],
+        date:      ds,
+        hours:     parseFloat(daySessions.reduce((a, s) => a + s.studyHours, 0).toFixed(1)),
+        questions: daySessions.reduce((a, s) => a + s.questions, 0),
+      });
+    }
+    return result;
+  }
+
+  // Gera as últimas 8 semanas
+  const weeksData = Array.from({ length: 8 }, (_, i) => {
+    const weekDays = getWeekData(i);
+    const startDate = weekDays[0].date;
+    const endDate   = weekDays[6].date;
+    return { weekOffset: i, startDate, endDate, days: weekDays };
+  });
+
   return NextResponse.json({
     totalHours:     parseFloat(totalHours.toFixed(1)),
     totalQuestions, totalCorrect, totalWrong,
@@ -157,5 +193,6 @@ export async function GET() {
         reviewCount: e.reviewCount, wrongCount: e.wrongCount, difficulty: e.difficulty,
       })),
     weeklyHours,
+    weeksData,
   });
 }

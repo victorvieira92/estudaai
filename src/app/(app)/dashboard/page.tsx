@@ -3,13 +3,18 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
-  Clock, Target, CheckCircle, XCircle,
-  Flame, TrendingUp, RefreshCw, AlertCircle, BookOpen,
+  Clock, CheckCircle, Flame, RefreshCw, BookOpen,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-         BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+} from "recharts";
 
 const BG = "#1B4040";
+
+interface WeekDay { day: string; date: string; hours: number; questions: number; }
+interface WeekData { weekOffset: number; startDate: string; endDate: string; days: WeekDay[]; }
 
 interface Stats {
   totalHours:      number;
@@ -32,7 +37,7 @@ interface Stats {
   todayBySubject:  { name: string; hours: number }[];
   subjectStats:    { name: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null }[];
   weeklyHours:     { day: string; hours: number }[];
-  weekStats?: { hours: number; targetHours: number; questions: number };
+  weeksData:       WeekData[];
 }
 
 const PIE_COLORS = [BG,"#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6"];
@@ -42,16 +47,35 @@ function fmtH(h: number) {
   return mm > 0 ? `${hh}h${mm.toString().padStart(2,"0")}min` : `${hh}h`;
 }
 
+function fmtDate(ds: string) {
+  const d = new Date(ds + "T12:00:00");
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
-  const [stats,   setStats]   = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [stats,      setStats]      = useState<Stats | null>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [weekOffset, setWeekOffset] = useState(0);   // 0 = semana atual
+  const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
 
   useEffect(() => {
-    fetch("/api/statistics").then(r => r.json()).then(setStats).catch(console.error).finally(() => setLoading(false));
+    fetch("/api/statistics")
+      .then(r => r.json())
+      .then(setStats)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
-  const hasStudyData = (stats?.totalHours ?? 0) > 0;
+  // Semana atual selecionada
+  const currentWeek = stats?.weeksData?.find(w => w.weekOffset === weekOffset);
+  const chartData   = currentWeek?.days ?? stats?.weeklyHours?.map(w => ({ ...w, questions: 0, date: "" })) ?? [];
+
+  const weekLabel = currentWeek
+    ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}`
+    : "";
+
+  const maxWeekOffset = (stats?.weeksData?.length ?? 1) - 1;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -66,7 +90,7 @@ export default function DashboardPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
-        {/* ── KPIs topo — estilo Estudei ── */}
+        {/* ── KPIs topo ── */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             {
@@ -80,8 +104,7 @@ export default function DashboardPage() {
                 ? `${stats.totalCorrect} Acertos · ${stats.totalWrong} Erros`
                 : "sem dados",
               value: stats?.accuracy !== null && stats?.accuracy !== undefined
-                ? `${stats.accuracy}%`
-                : "—",
+                ? `${stats.accuracy}%` : "—",
               color: stats?.accuracy !== null && stats?.accuracy !== undefined
                 ? stats.accuracy >= 70 ? "text-green-600"
                   : stats.accuracy >= 50 ? "text-yellow-600"
@@ -90,12 +113,9 @@ export default function DashboardPage() {
             },
             {
               label: "Progresso no Edital",
-              sub:   stats
-                ? `${stats.completedPdfs} PDFs concluídos · ${stats.totalPdfs - stats.completedPdfs} pendentes`
-                : "",
+              sub:   stats ? `${stats.completedPdfs} concluídos · ${stats.totalPdfs - stats.completedPdfs} pendentes` : "",
               value: stats && stats.totalPdfs > 0
-                ? `${Math.round((stats.completedPdfs / stats.totalPdfs) * 100)}%`
-                : "—",
+                ? `${Math.round((stats.completedPdfs / stats.totalPdfs) * 100)}%` : "—",
               color: "text-gray-900",
             },
             {
@@ -150,12 +170,12 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Painel disciplinas + Estudos do dia ── */}
+        {/* ── Painel disciplinas + coluna direita ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-          {/* Painel disciplinas — estilo tabela do Estudei */}
+          {/* Tabela disciplinas */}
           <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-base font-semibold">Painel por Disciplina</h2>
             </div>
             <div className="overflow-x-auto">
@@ -214,66 +234,112 @@ export default function DashboardPage() {
           {/* Coluna direita */}
           <div className="space-y-4">
 
-            {/* Metas de estudo semanal */}
+            {/* Metas semanal */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Metas de Estudo Semanal</h2>
-              </div>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Metas de Estudo Semanal</h2>
               {stats ? (
                 <div className="space-y-3">
-                  {stats.weeklyHours.some(w => w.hours > 0) ? (
-                    <>
-                      <div>
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Horas</span>
-                          <span>{fmtH(stats.weeklyHours.reduce((a, w) => a + w.hours, 0))}</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full" style={{
-                            width: `${Math.min(100, (stats.weeklyHours.reduce((a, w) => a + w.hours, 0) / 20) * 100)}%`,
-                            backgroundColor: BG,
-                          }} />
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex justify-between text-xs text-gray-500 mb-1">
-                          <span>Questões</span>
-                          <span>{stats.weeklyHours.length > 0 ? stats.totalQuestions : 0}</span>
-                        </div>
-                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-purple-500" style={{
-                            width: `${Math.min(100, (stats.totalQuestions / 300) * 100)}%`,
-                          }} />
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-400 text-center py-3">Sem dados esta semana</p>
-                  )}
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Horas de Estudo</span>
+                      <span>{fmtH(stats.weeklyHours.reduce((a,w) => a + w.hours, 0))}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all" style={{
+                        width: `${Math.min(100, (stats.weeklyHours.reduce((a,w) => a + w.hours, 0) / 20) * 100)}%`,
+                        backgroundColor: BG,
+                      }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>Questões</span>
+                      <span>{stats.totalQuestions}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-purple-500 transition-all" style={{
+                        width: `${Math.min(100, (stats.totalQuestions / 300) * 100)}%`,
+                      }} />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {[1, 2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
+                  {[1,2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
                 </div>
               )}
             </div>
 
-            {/* Estudo semanal — gráfico de barras */}
+            {/* ✅ Gráfico semanal com navegação + botões Tempo/Questões */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Estudo Semanal</h2>
-              {stats?.weeklyHours.some(w => w.hours > 0) ? (
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudo Semanal</h2>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setWeekOffset(w => Math.min(w + 1, maxWeekOffset))}
+                    disabled={weekOffset >= maxWeekOffset}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
+                  </button>
+                  <span className="text-xs text-gray-500 min-w-[80px] text-center">{weekLabel}</span>
+                  <button
+                    onClick={() => setWeekOffset(w => Math.max(w - 1, 0))}
+                    disabled={weekOffset === 0}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Botões Tempo / Questões */}
+              <div className="flex gap-2 mb-3">
+                <button
+                  onClick={() => setChartMode("hours")}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
+                  style={chartMode === "hours"
+                    ? { backgroundColor: BG, color: "#fff" }
+                    : { backgroundColor: "#F3F4F6", color: "#6B7280" }}
+                >
+                  Tempo
+                </button>
+                <button
+                  onClick={() => setChartMode("questions")}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
+                  style={chartMode === "questions"
+                    ? { backgroundColor: "#10B981", color: "#fff" }
+                    : { backgroundColor: "#F3F4F6", color: "#6B7280" }}
+                >
+                  Questões
+                </button>
+              </div>
+
+              {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={140}>
-                  <BarChart data={stats.weeklyHours} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                  <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                     <XAxis dataKey="day" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip formatter={(v: number) => [`${v.toFixed(1)}h`, "Horas"]} />
-                    <Bar dataKey="hours" radius={[3,3,0,0]} fill={BG} />
+                    <Tooltip
+                      formatter={(v: number) =>
+                        chartMode === "hours"
+                          ? [`${v.toFixed(1)}h`, "Horas"]
+                          : [`${v}`, "Questões"]
+                      }
+                    />
+                    <Bar
+                      dataKey={chartMode === "hours" ? "hours" : "questions"}
+                      radius={[3,3,0,0]}
+                      fill={chartMode === "hours" ? BG : "#10B981"}
+                      label={{ position: "top", fontSize: 9, fill: "#6B7280",
+                        formatter: (v: number) => v > 0 ? (chartMode === "hours" ? `${v.toFixed(1)}h` : v) : "" }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="h-36 flex items-center justify-center text-xs text-gray-400">
-                  Sem registros esta semana
+                  Sem registros nesta semana
                 </div>
               )}
             </div>
@@ -281,7 +347,7 @@ export default function DashboardPage() {
             {/* Estudos do dia */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold uppercase tracking-wide text-gray-500">Estudos do Dia</h2>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudos do Dia</h2>
                 {stats && stats.todayHours > 0 && (
                   <span className="text-xs font-semibold" style={{ color: BG }}>{fmtH(stats.todayHours)}</span>
                 )}
@@ -295,7 +361,7 @@ export default function DashboardPage() {
                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => [`${fmtH(v)}`, "Horas"]} />
+                    <Tooltip formatter={(v: number) => [fmtH(v), "Horas"]} />
                     <Legend iconSize={8} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -326,8 +392,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex gap-4">
               {[
-                { label: "Atrasadas", value: stats.lateReviews,                              color: "text-red-600"  },
-                { label: "Pendentes", value: stats.pendingReviews - stats.lateReviews,        color: "text-blue-600" },
+                { label: "Atrasadas", value: stats.lateReviews,                         color: "text-red-600"  },
+                { label: "Pendentes", value: stats.pendingReviews - stats.lateReviews,   color: "text-blue-600" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="bg-gray-50 rounded-xl px-5 py-3 text-center">
                   <p className="text-xs text-gray-400 mb-1">{label}</p>
