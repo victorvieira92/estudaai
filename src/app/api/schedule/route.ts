@@ -191,6 +191,15 @@ export async function GET(req: Request) {
       targetHours: parseFloat(targetHours.toFixed(2)),
     },
     nextSubject,
+    nextBlockType: (() => {
+      for (const block of todayDbBlocks) {
+        if (!block.subjectId) continue;
+        const done  = sessionsPerSubjectToday.get(block.subjectId) ?? 0;
+        const total = blocksPerSubjectToday.get(block.subjectId) ?? 1;
+        if (done < total) return block.blockType;
+      }
+      return null;
+    })(),
     weekDay: currentDayOfWeek,
   });
 }
