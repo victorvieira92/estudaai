@@ -137,7 +137,7 @@ export async function GET() {
   // Permite navegação entre semanas no gráfico do Dashboard
   const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
   
-  function getWeekData(weekOffset: number): { day: string; hours: number; questions: number }[] {
+  function getWeekData(weekOffset: number): { day: string; date: string; hours: number; questions: number }[] {
     // weekOffset 0 = semana atual, 1 = semana passada, etc
     const now = new Date();
     const dayOfWeek = now.getDay();
