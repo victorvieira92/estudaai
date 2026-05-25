@@ -26,6 +26,14 @@ export async function POST(req: Request) {
     const totalPages = safeInt(body.totalPages);
     const completed  = Boolean(body.completed ?? body.markCompleted);
 
+    // ✅ Salva category, topicName, pdfTitle, comment em notes como JSON
+    const notes = JSON.stringify({
+      category:  body.category  ?? "Teoria",
+      topicName: body.topicName ?? "",
+      pdfTitle:  body.pdfTitle  ?? "",
+      comment:   body.comment   ?? "",
+    });
+
     await prisma.$transaction(async (tx) => {
       // 1. Sessão de estudo
       await tx.studySession.create({
@@ -37,6 +45,7 @@ export async function POST(req: Request) {
           questions,
           correct,
           wrong,
+          notes,
         },
       });
 
@@ -73,42 +82,23 @@ export async function POST(req: Request) {
             },
           });
 
-          // 3. Revisões espaçadas — todas usando fuso de Brasília
-          // ✅ FIX: revisão 24h começa amanhã (startOfTomorrow), não hoje
-          // Revisão  7d = amanhã + 6 dias = 7 dias após o estudo
-          // Revisão 30d = amanhã + 29 dias = 30 dias após o estudo
+          // 3. Revisões espaçadas
           const tomorrow = startOfTomorrow();
-
           const revisoesPendentes = await tx.review.findMany({
             where: { pdfId, completed: false },
           });
-
-          // Remove revisões pendentes antigas do mesmo PDF para não duplicar
           if (revisoesPendentes.length > 0) {
-            await tx.review.deleteMany({
-              where: { pdfId, completed: false },
-            });
+            await tx.review.deleteMany({ where: { pdfId, completed: false } });
           }
-
-          // Cria revisões novas com datas corretas em BR
-          for (const [type, days] of [
-            ["24H",  1] as const,  // amanhã
-            ["7D",   7] as const,  // 7 dias a partir de amanhã
-            ["30D", 30] as const,  // 30 dias a partir de amanhã
-          ]) {
+          for (const [type, days] of [["24H",1],["7D",7],["30D",30]] as const) {
             await tx.review.create({
-              data: {
-                type,
-                reviewDate: addDays(tomorrow, days - 1),
-                pdfId,
-              },
+              data: { type, reviewDate: addDays(tomorrow, days - 1), pdfId },
             });
           }
         }
       }
     });
 
-    // Recalcula disciplina e tópico
     await recalcSubject(subjectId);
     if (topicId) await recalcTopic(topicId);
 
@@ -133,20 +123,13 @@ export async function GET() {
 }
 
 async function recalcTopic(topicId: string) {
-  const topic = await prisma.topic.findUnique({
-    where:   { id: topicId },
-    include: { pdfs: true },
-  });
+  const topic = await prisma.topic.findUnique({ where: { id: topicId }, include: { pdfs: true } });
   if (!topic) return;
   const total = topic.pdfs.length;
   const done  = topic.pdfs.filter(p => p.completed).length;
   await prisma.topic.update({
     where: { id: topicId },
-    data: {
-      totalPdfs:     total,
-      completedPdfs: done,
-      progress:      total > 0 ? Math.round((done / total) * 100) : 0,
-    },
+    data: { totalPdfs: total, completedPdfs: done, progress: total > 0 ? Math.round((done / total) * 100) : 0 },
   });
 }
 
@@ -166,10 +149,8 @@ async function recalcSubject(subjectId: string) {
       totalQuestions:   pdfs.reduce((a, p) => a + p.questions, 0),
       correctQuestions: pdfs.reduce((a, p) => a + p.correctQuestions, 0),
       wrongQuestions:   pdfs.reduce((a, p) => a + p.wrongQuestions, 0),
-      progress:         pdfs.length > 0
-        ? Math.round((pdfs.filter(p => p.completed).length / pdfs.length) * 100)
-        : 0,
-      lastStudyAt: new Date(),
+      progress:         pdfs.length > 0 ? Math.round((pdfs.filter(p => p.completed).length / pdfs.length) * 100) : 0,
+      lastStudyAt:      new Date(),
     },
   });
 }

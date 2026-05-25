@@ -2,14 +2,20 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useStudyTimer } from "@/hooks/useStudyTimer";
+import { useCountdown } from "@/hooks/useCountdown";
 import {
-  Play, Pause, Square, RotateCcw,
-  ChevronDown, CheckSquare, AlertCircle,
+  Play, Pause, Square, RotateCcw, ChevronDown,
+  CheckSquare, AlertCircle, Timer, Clock,
 } from "lucide-react";
+
+const BG = "#1B4040";
 
 interface Pdf     { id: string; title: string; completed: boolean; totalPages: number; lastPageStudied: number; }
 interface Topic   { id: string; name: string; pdfs: Pdf[]; }
 interface Subject { id: string; name: string; topics: Topic[]; }
+
+const CATEGORIES = ["Teoria", "Exercícios", "Revisão", "Leitura de Lei", "Videoaula"];
+const TIMER_PRESETS = [25, 30, 45, 50, 60, 90];
 
 async function safeFetch<T>(url: string): Promise<T | null> {
   try {
@@ -21,83 +27,90 @@ async function safeFetch<T>(url: string): Promise<T | null> {
   } catch { return null; }
 }
 
-// ─── Inner component (needs useSearchParams) ──────────────────────────────────
 function SessaoContent() {
   const searchParams = useSearchParams();
-  const timer = useStudyTimer();
 
-  const [subjects,      setSubjects]      = useState<Subject[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [subjectId,     setSubjectId]     = useState("");
-  const [topicId,       setTopicId]       = useState("");
-  const [pdfId,         setPdfId]         = useState("");
-  const [totalPages,    setTotalPages]    = useState("0");
-  const [startPage,     setStartPage]     = useState("1");
-  const [endPage,       setEndPage]       = useState("1");
-  const [questions,     setQuestions]     = useState("0");
-  const [correct,       setCorrect]       = useState("0");
-  const [markCompleted, setMarkCompleted] = useState(false);
-  const [saving,        setSaving]        = useState(false);
-  const [saved,         setSaved]         = useState(false);
-  const [error,         setError]         = useState("");
+  // Modo: cronômetro (contagem crescente) ou timer (contagem regressiva)
+  const [mode, setMode] = useState<"cronometro" | "timer">("cronometro");
+
+  const timer    = useStudyTimer();
+  const countdown = useCountdown();
+
+  const [subjects,       setSubjects]       = useState<Subject[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [subjectId,      setSubjectId]      = useState("");
+  const [topicId,        setTopicId]        = useState("");
+  const [pdfId,          setPdfId]          = useState("");
+  const [category,       setCategory]       = useState("Teoria");
+  const [material,       setMaterial]       = useState("");
+  const [comment,        setComment]        = useState("");
+  const [totalPages,     setTotalPages]     = useState("0");
+  const [startPage,      setStartPage]      = useState("1");
+  const [endPage,        setEndPage]        = useState("1");
+  const [questions,      setQuestions]      = useState("0");
+  const [correct,        setCorrect]        = useState("0");
+  const [markCompleted,  setMarkCompleted]  = useState(false);
+  const [theoryDone,     setTheoryDone]     = useState(false);
+  const [scheduleReview, setScheduleReview] = useState(true);
+  const [timerMins,      setTimerMins]      = useState(25);
+  const [saving,         setSaving]         = useState(false);
+  const [saved,          setSaved]          = useState(false);
+  const [error,          setError]          = useState("");
 
   const subject = subjects.find(s => s.id === subjectId);
   const topic   = subject?.topics.find(t => t.id === topicId);
   const pdf     = topic?.pdfs.find(p => p.id === pdfId);
   const wrong   = Math.max(0, (parseInt(questions) || 0) - (parseInt(correct) || 0));
-  const canSave = !!subjectId && !!topicId && !!pdfId;
+  const canSave = !!subjectId;
 
-  // ── Carrega matérias e aplica pré-seleção da URL ──────────────────────────
   useEffect(() => {
     safeFetch<Subject[]>("/api/subjects").then(d => {
       if (!d) return;
       const list: Subject[] = Array.isArray(d) ? d : (d as any).subjects ?? [];
       setSubjects(list);
 
-      // ✅ Lê ?subjectId= passado pelo painel Hoje ("Começar agora")
       const urlSubjectId = searchParams.get("subjectId");
       if (!urlSubjectId) return;
-
       const matchedSubject = list.find(s => s.id === urlSubjectId);
       if (!matchedSubject) return;
-
       setSubjectId(matchedSubject.id);
-
-      // Pré-seleciona o primeiro tópico com PDF não concluído
-      const firstTopicWithPdf = matchedSubject.topics.find(
-        t => t.pdfs.some(p => !p.completed)
-      );
-      if (!firstTopicWithPdf) return;
-      setTopicId(firstTopicWithPdf.id);
-
-      // Pré-seleciona o primeiro PDF não concluído desse tópico
-      const firstPdf = firstTopicWithPdf.pdfs.find(p => !p.completed);
+      const firstTopic = matchedSubject.topics.find(t => t.pdfs.some(p => !p.completed));
+      if (!firstTopic) return;
+      setTopicId(firstTopic.id);
+      const firstPdf = firstTopic.pdfs.find(p => !p.completed);
       if (!firstPdf) return;
       setPdfId(firstPdf.id);
-
-      // Preenche páginas
-      if ((firstPdf.lastPageStudied ?? 0) > 0)
-        setStartPage(String(firstPdf.lastPageStudied));
-      if ((firstPdf.totalPages ?? 0) > 0)
-        setTotalPages(String(firstPdf.totalPages));
+      if ((firstPdf.lastPageStudied ?? 0) > 0) setStartPage(String(firstPdf.lastPageStudied));
+      if ((firstPdf.totalPages ?? 0) > 0) setTotalPages(String(firstPdf.totalPages));
     }).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Resets em cascata ao trocar seleções manualmente
-  useEffect(() => { setTopicId(""); setPdfId(""); }, [subjectId]);
-  useEffect(() => { setPdfId(""); }, [topicId]);
+  useEffect(() => { setTopicId(""); setPdfId(""); setMaterial(""); }, [subjectId]);
+  useEffect(() => { setPdfId(""); setMaterial(""); }, [topicId]);
   useEffect(() => {
-    if (!pdfId || !pdf) return;
+    if (!pdf) return;
     if ((pdf.lastPageStudied ?? 0) > 0) setStartPage(String(pdf.lastPageStudied));
-    if ((pdf.totalPages ?? 0) > 0)     setTotalPages(String(pdf.totalPages));
+    if ((pdf.totalPages ?? 0) > 0) setTotalPages(String(pdf.totalPages));
+    setMaterial(pdf.title);
   }, [pdfId, pdf]);
 
-  // ── Salvar sessão ─────────────────────────────────────────────────────────
-  const doSave = async (seconds: number) => {
-    if (!canSave) { setError("Selecione disciplina, tópico e PDF."); return; }
+  // Quando muda preset do timer
+  const applyTimerPreset = (mins: number) => {
+    setTimerMins(mins);
+    countdown.setDuration(mins);
+  };
+
+  const getElapsedSeconds = (): number => {
+    if (mode === "cronometro") return timer.elapsed;
+    return countdown.elapsedSeconds;
+  };
+
+  const doSave = async () => {
+    if (!canSave) { setError("Selecione a disciplina."); return; }
     setSaving(true); setError("");
-    const hours    = seconds / 3600;
+    const seconds = getElapsedSeconds();
+    const hours   = seconds / 3600;
     const duration = Math.max(1, Math.round(hours * 60));
     try {
       const res = await fetch("/api/study-sessions", {
@@ -110,92 +123,135 @@ function SessaoContent() {
           endPage:         parseInt(endPage)   || 1,
           totalPages:      parseInt(totalPages) || 0,
           questions:       parseInt(questions)  || 0,
-          correctQuestions: parseInt(correct)   || 0,
+          correctQuestions: parseInt(correct)  || 0,
           wrongQuestions:  wrong,
           completed:       markCompleted,
+          category,
+          topicName: topic?.name  ?? "",
+          pdfTitle:  pdf?.title   ?? material,
+          comment,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message ?? "Erro ao salvar.");
       setSaved(true);
-      timer.reset();
-      setQuestions("0"); setCorrect("0"); setMarkCompleted(false);
+      if (mode === "cronometro") timer.reset();
+      else countdown.reset();
+      setQuestions("0"); setCorrect("0"); setComment(""); setMarkCompleted(false); setTheoryDone(false);
       setTimeout(() => setSaved(false), 4000);
     } catch (e: any) {
       setError(e.message);
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  const { state, formatted } = timer;
+  const isRunning = mode === "cronometro" ? timer.state === "running" : countdown.state === "running";
+  const isPaused  = mode === "cronometro" ? timer.state === "paused"  : countdown.state === "paused";
+  const isIdle    = mode === "cronometro" ? timer.state === "idle"    : countdown.state === "idle";
+  const formatted = mode === "cronometro" ? timer.formatted : countdown.formatted;
+
+  const handleStart  = () => mode === "cronometro" ? timer.start()   : countdown.start();
+  const handlePause  = () => mode === "cronometro" ? timer.pause()   : countdown.pause();
+  const handleResume = () => mode === "cronometro" ? timer.resume()  : countdown.resume();
+  const handleReset  = () => mode === "cronometro" ? timer.reset()   : countdown.reset();
+  const handleStop   = () => { if (mode === "cronometro") timer.stop(); else { /* keep elapsed */ } doSave(); };
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Centro Operacional</p>
+      <div className="text-white px-8"
+        style={{ backgroundColor: BG, minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>Centro Operacional</p>
         <h1 className="text-3xl font-bold">Sessão de Estudo</h1>
-        <p className="text-gray-400 text-sm mt-1">Inicie o cronômetro, estude e salve automaticamente.</p>
+        <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.6)" }}>Inicie o cronômetro, estude e salve automaticamente.</p>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-6 py-8 space-y-5">
 
-        {/* ── Banner de contexto pré-selecionado ── */}
-        {/* ✅ Mostra ao usuário que a disciplina foi pré-selecionada pelo painel Hoje */}
-        {searchParams.get("subjectId") && subject && (
-          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
-            <span className="text-blue-500">⚡</span>
-            <span>
-              Continuando de onde parou em{" "}
-              <strong>{subject.name}</strong>
-              {pdf && <> — <span className="font-medium">{pdf.title}</span></>}
-            </span>
-          </div>
-        )}
+        {/* ── Seletor Cronômetro / Timer ── */}
+        <div className="flex gap-2 p-1 bg-gray-200 rounded-xl w-fit">
+          {([["cronometro","Cronômetro", Clock], ["timer","Timer", Timer]] as const).map(([m, label, Icon]) => (
+            <button key={m} onClick={() => setMode(m)}
+              className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all"
+              style={mode === m ? { backgroundColor: BG, color: "#fff" } : { backgroundColor: "transparent", color: "#6B7280" }}>
+              <Icon className="w-4 h-4" />{label}
+            </button>
+          ))}
+        </div>
 
-        {/* ── Cronômetro ── */}
-        <div className="flex flex-col items-center gap-5 p-8 rounded-2xl border" style={{ backgroundColor: "#1B4040", borderColor: "rgba(255,255,255,0.1)" }}>
-          <span className="text-xs text-gray-500 uppercase tracking-widest">Horas Líquidas</span>
+        {/* ── Cronômetro / Timer ── */}
+        <div className="flex flex-col items-center gap-5 p-8 rounded-2xl border"
+          style={{ backgroundColor: BG, borderColor: "rgba(255,255,255,0.1)" }}>
+
+          {/* Presets do timer */}
+          {mode === "timer" && isIdle && (
+            <div className="flex flex-wrap gap-2 justify-center">
+              {TIMER_PRESETS.map(mins => (
+                <button key={mins} onClick={() => applyTimerPreset(mins)}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
+                  style={timerMins === mins
+                    ? { backgroundColor: "#10B981", color: "#fff" }
+                    : { backgroundColor: "rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.7)" }}>
+                  {mins}min
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Progresso do timer */}
+          {mode === "timer" && !isIdle && countdown.targetSecs > 0 && (
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div className="h-2 rounded-full bg-green-400 transition-all"
+                style={{ width: `${Math.min(100, countdown.pct)}%` }} />
+            </div>
+          )}
+
+          <span className="text-xs uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {mode === "cronometro" ? "Horas Líquidas" : "Timer"}
+          </span>
+
           <span className={`text-7xl font-mono font-bold tabular-nums select-none ${
-            state === "running" ? "text-green-400"
-            : state === "paused" ? "text-yellow-400"
+            isRunning ? "text-green-400"
+            : isPaused ? "text-yellow-400"
+            : countdown.state === "done" ? "text-red-400"
             : "text-gray-400"
-          }`}>
-            {formatted}
+          }`}>{formatted}</span>
+
+          <span className="text-xs h-4" style={{ color: "rgba(255,255,255,0.4)" }}>
+            {isRunning && "● Rodando"}
+            {isPaused  && "⏸ Pausado"}
+            {isIdle    && "Pronto para iniciar"}
+            {countdown.state === "done" && "⏰ Tempo esgotado!"}
           </span>
-          <span className="text-xs text-gray-500 h-4">
-            {state === "running" && "● Rodando"}
-            {state === "paused"  && "⏸ Pausado"}
-            {state === "idle"    && "Pronto para iniciar"}
-          </span>
+
           <div className="flex gap-3">
-            {state === "idle" && (
-              <button onClick={timer.start}
+            {isIdle && (
+              <button onClick={handleStart}
                 className="flex items-center gap-2 px-8 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl text-sm transition-colors">
                 <Play className="w-4 h-4" /> Iniciar
               </button>
             )}
-            {state === "running" && (<>
-              <button onClick={timer.pause}
+            {isRunning && (<>
+              <button onClick={handlePause}
                 className="flex items-center gap-2 px-6 py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-semibold rounded-xl text-sm transition-colors">
                 <Pause className="w-4 h-4" /> Pausar
               </button>
-              <button onClick={() => doSave(timer.stop())}
+              <button onClick={handleStop}
                 className="flex items-center gap-2 px-6 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors">
                 <Square className="w-4 h-4" /> Finalizar
               </button>
             </>)}
-            {state === "paused" && (<>
-              <button onClick={timer.resume}
-                className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl text-sm transition-colors">
-                <Play className="w-4 h-4" /> Retomar
-              </button>
-              <button onClick={() => doSave(timer.stop())}
+            {(isPaused || countdown.state === "done") && (<>
+              {isPaused && (
+                <button onClick={handleResume}
+                  className="flex items-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl text-sm transition-colors">
+                  <Play className="w-4 h-4" /> Retomar
+                </button>
+              )}
+              <button onClick={doSave}
                 className="flex items-center gap-2 px-6 py-3 bg-red-700 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition-colors">
                 <Square className="w-4 h-4" /> Finalizar
               </button>
-              <button onClick={timer.reset}
+              <button onClick={handleReset}
                 className="px-4 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-xl transition-colors">
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -203,131 +259,162 @@ function SessaoContent() {
           </div>
         </div>
 
-        {/* ── Formulário ── */}
+        {/* ── Formulário de registro ── */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5">
           <div>
             <h2 className="text-lg font-semibold">Registrar estudo de hoje</h2>
             <p className="text-sm text-gray-500">Selecione disciplina, tópico e PDF para salvar.</p>
           </div>
 
-          {/* Selects em cascata */}
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              {
-                label:    "Disciplina *",
-                value:    subjectId,
-                set:      setSubjectId,
-                opts:     subjects.map(s => ({ id: s.id, name: s.name })),
-                disabled: loading,
-              },
-              {
-                label:    "Tópico *",
-                value:    topicId,
-                set:      setTopicId,
-                opts:     (subject?.topics ?? []).map(t => ({ id: t.id, name: t.name })),
-                disabled: !subject,
-              },
-              {
-                label:    "PDF *",
-                value:    pdfId,
-                set:      setPdfId,
-                opts:     (topic?.pdfs ?? []).map(p => ({ id: p.id, name: p.title })),
-                disabled: !topic,
-              },
-            ].map(({ label, value, set, opts, disabled }) => (
-              <div key={label}>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
-                  {label}
-                </label>
-                <div className="relative">
-                  <select
-                    value={value}
-                    onChange={e => set(e.target.value)}
-                    disabled={disabled}
-                    className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 pr-8 disabled:bg-gray-50 disabled:text-gray-400"
-                  >
-                    <option value="">Selecione</option>
-                    {opts.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
-                </div>
-              </div>
+          {/* Data: Hoje / Ontem / Outro (simplificado — sempre Hoje) */}
+          <div className="flex gap-2">
+            {["Hoje"].map(d => (
+              <span key={d} className="px-4 py-1.5 rounded-lg text-sm font-semibold text-white"
+                style={{ backgroundColor: BG }}>{d}</span>
             ))}
           </div>
 
-          {/* Aviso de página anterior */}
-          {(pdf?.lastPageStudied ?? 0) > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 text-sm text-blue-700">
-              📌 Você parou na página {pdf?.lastPageStudied}. Continue a partir daí.
+          {/* Categoria + Disciplina + Tempo (linha 1) */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Categoria</label>
+              <div className="relative">
+                <select value={category} onChange={e => setCategory(e.target.value)}
+                  className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none pr-8">
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Disciplina *</label>
+              <div className="relative">
+                <select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={loading}
+                  className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none pr-8 disabled:bg-gray-50">
+                  <option value="">Selecione...</option>
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tempo de Estudo</label>
+              <div className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 font-mono text-center">
+                {formatted}
+              </div>
+            </div>
+          </div>
+
+          {/* Tópico + Material (linha 2) */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tópico</label>
+              <div className="relative">
+                <select value={topicId} onChange={e => setTopicId(e.target.value)} disabled={!subject}
+                  className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none pr-8 disabled:bg-gray-50 disabled:text-gray-400">
+                  <option value="">Selecione...</option>
+                  {(subject?.topics ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Material</label>
+              <input type="text" value={material} onChange={e => setMaterial(e.target.value)}
+                placeholder="Ex.: Aula 01"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2"
+                style={{ '--tw-ring-color': BG } as any} />
+            </div>
+          </div>
+
+          {/* PDF */}
+          {topic && topic.pdfs.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">PDF</label>
+              <div className="relative">
+                <select value={pdfId} onChange={e => setPdfId(e.target.value)}
+                  className="w-full appearance-none border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none pr-8">
+                  <option value="">Selecione...</option>
+                  {topic.pdfs.map(p => <option key={p.id} value={p.id}>{p.title}</option>)}
+                </select>
+                <ChevronDown className="absolute right-2 top-3 w-4 h-4 text-gray-400 pointer-events-none" />
+              </div>
             </div>
           )}
 
-          {/* Páginas */}
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              ["Total de páginas", totalPages, setTotalPages],
-              ["Página inicial",   startPage,  setStartPage],
-              ["Página final",     endPage,    setEndPage],
-            ].map(([l, v, s]: any) => (
-              <div key={l}>
-                <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">{l}</label>
-                <input
-                  type="number" min="0" value={v}
-                  onChange={e => s(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-            ))}
+          {/* Checkboxes */}
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={theoryDone} onChange={e => setTheoryDone(e.target.checked)}
+                className="rounded" />
+              Teoria Finalizada
+            </label>
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={scheduleReview} onChange={e => setScheduleReview(e.target.checked)}
+                className="rounded" />
+              Programar Revisões
+            </label>
           </div>
 
-          {/* Questões */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
-                Questões feitas
-              </label>
-              <input
-                type="number" min="0" value={questions}
-                onChange={e => setQuestions(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+          {/* Questões + Páginas */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Questões */}
+            <div className="border border-gray-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Questões — Acertos / Erros</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <input type="number" min="0" value={correct} onChange={e => setCorrect(e.target.value)}
+                    placeholder="Acertos"
+                    className="w-full border-b-2 border-gray-200 focus:border-green-500 outline-none text-2xl text-center font-bold text-green-600 py-1 bg-transparent" />
+                </div>
+                <div>
+                  <input type="number" min="0" value={wrong} readOnly
+                    className="w-full border-b-2 border-gray-200 outline-none text-2xl text-center font-bold text-red-500 py-1 bg-transparent cursor-default" />
+                </div>
+              </div>
+              <div className="mt-2">
+                <input type="number" min="0" value={questions} onChange={e => setQuestions(e.target.value)}
+                  placeholder="Total de questões"
+                  className="w-full border-b border-gray-200 focus:border-blue-400 outline-none text-sm text-center text-gray-500 py-1 bg-transparent" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
-                Acertos
-              </label>
-              <input
-                type="number" min="0" value={correct}
-                onChange={e => setCorrect(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-              />
+
+            {/* Páginas */}
+            <div className="border border-gray-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Páginas — Início / Fim</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="number" min="0" value={startPage} onChange={e => setStartPage(e.target.value)}
+                  className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none text-2xl text-center font-bold text-gray-700 py-1 bg-transparent" />
+                <input type="number" min="0" value={endPage} onChange={e => setEndPage(e.target.value)}
+                  className="w-full border-b-2 border-gray-200 focus:border-blue-500 outline-none text-2xl text-center font-bold text-gray-700 py-1 bg-transparent" />
+              </div>
+              <div className="mt-2">
+                <input type="number" min="0" value={totalPages} onChange={e => setTotalPages(e.target.value)}
+                  placeholder="Total de páginas"
+                  className="w-full border-b border-gray-200 focus:border-blue-400 outline-none text-sm text-center text-gray-500 py-1 bg-transparent" />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">
-                Erros (auto)
-              </label>
-              <input
-                readOnly value={wrong}
-                className={`w-full border rounded-lg px-3 py-2.5 text-sm bg-gray-50 ${
-                  wrong > 0 ? "border-red-300 text-red-700" : "border-gray-200 text-gray-500"
-                }`}
-              />
-            </div>
+          </div>
+
+          {/* Comentários */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Comentários</label>
+            <textarea value={comment} onChange={e => setComment(e.target.value)}
+              placeholder="Observações sobre a sessão..."
+              rows={3}
+              className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 resize-none"
+              style={{ '--tw-ring-color': BG } as any} />
           </div>
 
           {/* Marcar PDF como concluído */}
           {pdf && (
-            <button
-              type="button"
-              onClick={() => setMarkCompleted(!markCompleted)}
+            <button type="button" onClick={() => setMarkCompleted(!markCompleted)}
               className={`flex items-center gap-3 text-sm rounded-lg px-4 py-2.5 border transition-colors ${
-                markCompleted
-                  ? "bg-gray-900 border-gray-900 text-white"
-                  : "bg-white border-gray-300 text-gray-700 hover:border-gray-500"
+                markCompleted ? "text-white" : "bg-white border-gray-300 text-gray-700 hover:border-gray-500"
               }`}
-            >
+              style={markCompleted ? { backgroundColor: BG, borderColor: BG } : {}}>
               <CheckSquare className="w-4 h-4" />
-              Marcar &quot;{pdf.title}&quot; como concluído
+              Teoria Finalizada — &quot;{pdf.title}&quot;
             </button>
           )}
 
@@ -344,31 +431,16 @@ function SessaoContent() {
             </div>
           )}
 
-          {/* Botão salvar */}
+          {/* Botão Salvar */}
           <div className="flex gap-3 pt-1">
-            {state === "idle" && (
-              <button
-                onClick={() => doSave(0)}
-                disabled={saving || !canSave}
-                className="px-6 py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors"
-              >
-                {saving ? "Salvando..." : "Salvar sessão"}
-              </button>
-            )}
-            {(state === "running" || state === "paused") && (
-              <button
-                onClick={() => doSave(timer.stop())}
-                disabled={saving || !canSave}
-                className="px-6 py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors"
-              >
-                {saving ? "Salvando..." : "⏹ Finalizar e Salvar"}
-              </button>
-            )}
+            <button onClick={doSave} disabled={saving || !canSave}
+              className="px-6 py-3 text-white font-semibold rounded-xl text-sm transition-colors disabled:opacity-50"
+              style={{ backgroundColor: BG }}>
+              {saving ? "Salvando..." : "Salvar sessão"}
+            </button>
           </div>
           {!canSave && (
-            <p className="text-xs text-gray-400 text-center">
-              Selecione disciplina, tópico e PDF para salvar
-            </p>
+            <p className="text-xs text-gray-400 text-center">Selecione a disciplina para salvar</p>
           )}
         </div>
       </div>
@@ -376,12 +448,11 @@ function SessaoContent() {
   );
 }
 
-// ─── Wrapper com Suspense (obrigatório para useSearchParams no Next.js 14) ────
 export default function SessaoPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#1B4040" }} />
       </div>
     }>
       <SessaoContent />
