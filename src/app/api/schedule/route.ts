@@ -8,6 +8,9 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json({}, { status: 401 });
 
   const uid = session.user.id as string;
+  // ✅ FIX: usa fuso de Brasília (UTC-3) para evitar bug do dia 23/05
+  const nowBR = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const todayBRStr = nowBR.toISOString().slice(0, 10); // "YYYY-MM-DD" em BR
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayEnd = new Date(today);
@@ -43,8 +46,9 @@ export async function GET() {
       take:    5,
     }),
     // Sessões de hoje — com subject para exibir no histórico
+    // ✅ FIX: busca ampla e filtra por data BR para evitar bug de timezone
     prisma.studySession.findMany({
-      where:   { userId: uid, createdAt: { gte: today, lte: todayEnd } },
+      where:   { userId: uid, createdAt: { gte: new Date(todayBRStr + "T00:00:00-03:00"), lte: new Date(todayBRStr + "T23:59:59-03:00") } },
       include: { subject: { select: { id: true, name: true } } },
       orderBy: { createdAt: "asc" },
     }),
@@ -162,7 +166,15 @@ export async function GET() {
       targetHours:  parseFloat(targetHours.toFixed(2)),
       // ✅ targetQuestions removido — sem meta definida pelo usuário
     },
-    nextSubject: scored[0] ?? null,
+    // ✅ FIX: próxima ação exclui matérias já estudadas hoje
+    // Se estudou Dir. Tributário hoje, recomenda a próxima matéria do ciclo
+    nextSubject: (() => {
+      const studiedTodayIds = new Set(sessions.map(s => s.subjectId));
+      // Primeiro tenta matéria não estudada hoje
+      const notStudiedYet = scored.find(s => !studiedTodayIds.has(s.id));
+      // Se todas já foram estudadas hoje, retorna a de maior score mesmo assim
+      return notStudiedYet ?? scored[0] ?? null;
+    })(),
     weekDay,
   });
 }

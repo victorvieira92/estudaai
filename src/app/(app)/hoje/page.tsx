@@ -102,7 +102,7 @@ export default function HojePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
         <p className="text-gray-400 text-sm">{DAYS[data.weekDay]}, {dateStr}</p>
         <h1 className="text-3xl font-bold mt-1">Painel do Dia</h1>
         <p className="text-gray-400 text-sm mt-1">Seu plano de estudos personalizado para hoje</p>
@@ -176,7 +176,7 @@ export default function HojePage() {
 
         {/* Próxima ação recomendada */}
         {data.nextSubject && (
-          <div className="bg-gray-950 text-white rounded-2xl p-6">
+          <div className="text-white rounded-2xl p-6" style={{ backgroundColor: "#1B4040" }}>
             <div className="flex items-center gap-2 mb-2">
               <Zap className="w-5 h-5 text-yellow-400" />
               <span className="text-xs text-gray-400 uppercase tracking-widest font-medium">
@@ -448,7 +448,7 @@ export default function HojePage() {
         )}
 
         {/* Dica do dia */}
-        <div className="bg-gray-950 text-white rounded-2xl p-6">
+        <div className="text-white rounded-2xl p-6" style={{ backgroundColor: "#1B4040" }}>
           <p className="text-sm font-semibold text-yellow-400 mb-2">💡 Dica — Davi Lago</p>
           <p className="text-gray-300 text-sm leading-relaxed">
             Seus melhores blocos são de madrugada (04:15) e manhã cedo (07:00) — quando o cérebro ainda está fresco.

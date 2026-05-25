@@ -183,7 +183,7 @@ export default function PrioridadesPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
@@ -411,7 +411,7 @@ export default function PrioridadesPage() {
         </div>
 
         {/* Legenda */}
-        <div className="bg-gray-950 text-white rounded-2xl p-6">
+        <div className="text-white rounded-2xl p-6" style={{ backgroundColor: "#1B4040" }}>
           <h3 className="font-semibold mb-3">📊 Como o score é calculado</h3>
           <div className="grid md:grid-cols-2 gap-3 text-sm text-gray-400">
             {[

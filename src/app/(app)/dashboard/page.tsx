@@ -49,7 +49,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
         <p className="text-gray-400 text-sm">Bem-vindo de volta,</p>
         <h1 className="text-3xl font-bold mt-1">{session?.user?.name ?? "Concurseiro"} 👋</h1>
       </div>
@@ -260,7 +260,7 @@ export default function DashboardPage() {
         </div>
 
         {/* ── Método Davi Lago ── */}
-        <div className="bg-gray-950 text-white rounded-2xl p-6">
+        <div className="text-white rounded-2xl p-6" style={{ backgroundColor: "#1B4040" }}>
           <h2 className="text-lg font-semibold mb-4">💡 Método de estudo — Davi Lago</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[

@@ -33,11 +33,11 @@ const externalLinks = [
   { href: "https://notebooklm.google.com/notebook",                      label: "NotebookLM", icon: BookMarked    },
 ];
 
-// Cor extraída da logo: verde-escuro petróleo #1B4040
-const BG = "#1B4040";
-const BG_HOVER = "#163535";
-const BG_ACTIVE = "rgba(255,255,255,0.12)";
-const BORDER = "rgba(255,255,255,0.08)";
+const BG      = "#1B4040";
+const BORDER  = "rgba(255,255,255,0.08)";
+const MUTED   = "rgba(255,255,255,0.45)";
+const ACTIVE  = "rgba(255,255,255,0.15)";
+const HOVER   = "rgba(255,255,255,0.08)";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -48,29 +48,30 @@ export function Sidebar() {
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* Logo estilo Estudei — ícone + texto lado a lado */}
+      {/* ── Logo grande + nome do usuário ── */}
       <div
-        className="px-4 py-4 flex items-center gap-2.5"
+        className="flex flex-col items-center py-5 px-4 gap-2"
         style={{ borderBottom: `1px solid ${BORDER}` }}
       >
+        {/* Logo ocupa toda a largura disponível */}
         <Image
           src="/logo-estudaai.png"
           alt="EstudaAí"
-          width={32}
-          height={32}
-          className="rounded-md object-contain shrink-0"
-          style={{ background: "transparent" }}
+          width={160}
+          height={80}
+          className="object-contain w-full"
+          priority
         />
-        <div className="min-w-0">
-          <p className="text-white font-bold text-base leading-tight tracking-tight">
-            EstudaAí
-          </p>
-          <p className="text-xs truncate" style={{ color: "rgba(255,255,255,0.45)" }}>
-            {session?.user?.name ?? "Concurseiro"}
-          </p>
-        </div>
+        {/* Nome do usuário embaixo da logo */}
+        <p
+          className="text-xs text-center truncate w-full"
+          style={{ color: MUTED }}
+        >
+          {session?.user?.name ?? "Concurseiro"}
+        </p>
       </div>
 
+      {/* ── Navegação ── */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
@@ -78,14 +79,24 @@ export function Sidebar() {
             <Link
               key={href}
               href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
               style={{
-                backgroundColor: active ? "rgba(255,255,255,0.15)" : "transparent",
-                color: active ? "#ffffff" : "rgba(255,255,255,0.6)",
+                backgroundColor: active ? ACTIVE : "transparent",
+                color: active ? "#ffffff" : MUTED,
                 fontWeight: active ? 600 : 400,
               }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.6)"; }}
+              onMouseEnter={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+                  (e.currentTarget as HTMLElement).style.color = "#fff";
+                }
+              }}
+              onMouseLeave={e => {
+                if (!active) {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+                  (e.currentTarget as HTMLElement).style.color = MUTED;
+                }
+              }}
             >
               <Icon className="w-4 h-4 shrink-0" />
               {label}
@@ -103,25 +114,38 @@ export function Sidebar() {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
-            style={{ color: "rgba(255,255,255,0.6)" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.6)"; }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
+            style={{ color: MUTED }}
+            onMouseEnter={e => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+              (e.currentTarget as HTMLElement).style.color = "#fff";
+            }}
+            onMouseLeave={e => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+              (e.currentTarget as HTMLElement).style.color = MUTED;
+            }}
           >
             <Icon className="w-4 h-4 shrink-0" />
             <span>{label}</span>
-            <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.25)" }}>↗</span>
+            <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>↗</span>
           </a>
         ))}
       </nav>
 
+      {/* ── Sair ── */}
       <div className="p-3" style={{ borderTop: `1px solid ${BORDER}` }}>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm transition-colors"
-          style={{ color: "rgba(255,255,255,0.6)" }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.6)"; }}
+          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm transition-all"
+          style={{ color: MUTED }}
+          onMouseEnter={e => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
+            (e.currentTarget as HTMLElement).style.color = "#fff";
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+            (e.currentTarget as HTMLElement).style.color = MUTED;
+          }}
         >
           <LogOut className="w-4 h-4" /> Sair
         </button>
