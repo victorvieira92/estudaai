@@ -297,7 +297,7 @@ export default function HistoricoPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="text-white px-8"
-        style={{ backgroundColor: BG, minHeight: 100, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        style={{ backgroundColor: BG, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <h1 className="text-3xl font-bold">Histórico</h1>
         <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.6)" }}>Todos os seus registros de estudo</p>
       </div>
