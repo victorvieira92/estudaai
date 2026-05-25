@@ -33,11 +33,11 @@ const externalLinks = [
   { href: "https://notebooklm.google.com/notebook",                      label: "NotebookLM", icon: BookMarked    },
 ];
 
-const BG      = "#1B4040";
-const BORDER  = "rgba(255,255,255,0.08)";
-const MUTED   = "rgba(255,255,255,0.45)";
-const ACTIVE  = "rgba(255,255,255,0.15)";
-const HOVER   = "rgba(255,255,255,0.08)";
+const BG     = "#1B4040";
+const BORDER = "rgba(255,255,255,0.08)";
+const MUTED  = "rgba(255,255,255,0.5)";
+const ACTIVE = "rgba(255,255,255,0.15)";
+const HOVER  = "rgba(255,255,255,0.08)";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -48,23 +48,25 @@ export function Sidebar() {
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* ── Logo grande + nome do usuário ── */}
+      {/* ── Header: logo + nome alinhados à esquerda como barra superior ── */}
       <div
-        className="flex flex-col items-center py-5 px-4 gap-2"
+        className="flex flex-col items-start px-4 py-4"
         style={{ borderBottom: `1px solid ${BORDER}` }}
       >
-        {/* Logo ocupa toda a largura disponível */}
-        <Image
-          src="/logo-estudaai.png"
-          alt="EstudaAí"
-          width={160}
-          height={80}
-          className="object-contain w-full"
-          priority
-        />
-        {/* Nome do usuário embaixo da logo */}
+        {/* Logo ocupa largura total do painel */}
+        <div className="w-full">
+          <Image
+            src="/logo-estudaai.png"
+            alt="EstudaAí"
+            width={192}
+            height={96}
+            className="w-full object-contain"
+            priority
+          />
+        </div>
+        {/* Nome do usuário logo abaixo da logo, alinhado à esquerda */}
         <p
-          className="text-xs text-center truncate w-full"
+          className="text-xs mt-1 truncate w-full pl-1"
           style={{ color: MUTED }}
         >
           {session?.user?.name ?? "Concurseiro"}
@@ -82,8 +84,8 @@ export function Sidebar() {
               className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
               style={{
                 backgroundColor: active ? ACTIVE : "transparent",
-                color: active ? "#ffffff" : MUTED,
-                fontWeight: active ? 600 : 400,
+                color:           active ? "#ffffff" : MUTED,
+                fontWeight:      active ? 600 : 400,
               }}
               onMouseEnter={e => {
                 if (!active) {
