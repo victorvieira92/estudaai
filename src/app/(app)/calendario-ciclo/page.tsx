@@ -198,7 +198,10 @@ export default function CalendarioCicloPage() {
                 setShowConfig(!showConfig);
               }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-              style={{ backgroundColor: showConfig ? "#fff", color: showConfig ? BG_HEADER : "#fff", border: "1px solid rgba(255,255,255,0.3)" } as any}
+              style={showConfig
+                ? { backgroundColor: "#fff", color: BG_HEADER, border: "1px solid rgba(255,255,255,0.3)" }
+                : { backgroundColor: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.3)" }
+              }
             >
               <Settings className="w-4 h-4" />
               {showConfig ? "Fechar" : "Editar planejamento"}
