@@ -88,7 +88,10 @@ export async function GET(req: Request) {
   const scored = subjects
     .map(s => {
       const allPdfs   = s.topics.flatMap(t => t.pdfs);
-      const nextPdf   = allPdfs.find(p => !p.completed);
+      // ✅ FIX: prioriza PDFs já iniciados (lastPageStudied > 0) antes dos intocados
+      // Evita pular "Aula 00" (18% progresso) e ir direto para "Aula 01" (0%)
+      const notCompleted = allPdfs.filter(p => !p.completed);
+      const nextPdf = notCompleted.find(p => p.lastPageStudied > 0) ?? notCompleted[0] ?? null;
       const daysSince = s.lastStudyAt
         ? Math.floor((Date.now() - new Date(s.lastStudyAt).getTime()) / 86400000)
         : 30;
