@@ -48,25 +48,22 @@ export function Sidebar() {
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* ── Header: logo + nome alinhados à esquerda como barra superior ── */}
+      {/* ── Logo + nome do usuário ── */}
+      {/* py-8 = mesmo padding do header das páginas para alinhar visualmente */}
       <div
-        className="flex flex-col items-start px-4 py-4"
+        className="flex flex-col items-center justify-center px-4 py-8"
         style={{ borderBottom: `1px solid ${BORDER}` }}
       >
-        {/* Logo ocupa largura total do painel */}
-        <div className="w-full">
-          <Image
-            src="/logo-estudaai.png"
-            alt="EstudaAí"
-            width={192}
-            height={96}
-            className="w-full object-contain"
-            priority
-          />
-        </div>
-        {/* Nome do usuário logo abaixo da logo, alinhado à esquerda */}
+        <Image
+          src="/logo-estudaai.png"
+          alt="EstudaAí"
+          width={148}
+          height={74}
+          className="object-contain w-full"
+          priority
+        />
         <p
-          className="text-xs mt-1 truncate w-full pl-1"
+          className="text-xs mt-2 text-center truncate w-full"
           style={{ color: MUTED }}
         >
           {session?.user?.name ?? "Concurseiro"}
