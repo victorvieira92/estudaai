@@ -25,6 +25,7 @@ model User {
   resumos       Resumo[]
   weeklyConfig  WeeklyCycleConfig?
   studyBlocks   StudyBlock[]
+  editalTopicos EditalTopico[]
 }
 
 model Subject {
@@ -240,4 +241,24 @@ model StudyBlock {
   blockType String   @default("leitura")
   startTime String?
   endTime   String?
+}
+
+model EditalTopico {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modulo       String
+  disciplina   String
+  topico       String
+  ordem        Int       @default(0)
+  concluido    Boolean   @default(false)
+  questoes     Int       @default(0)
+  acertos      Int       @default(0)
+  erros        Int       @default(0)
+  ultimoEstudo DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, disciplina, topico])
+  @@index([userId])
 }
