@@ -47,18 +47,21 @@ export function Sidebar() {
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* ── Só a logo, sem nenhum texto adicional ── */}
-      {/* py-8 alinha com o header das páginas */}
+      {/* ── Logo com altura fixa igual ao header das páginas (py-8 + conteúdo ~96px) ── */}
       <div
-        className="flex items-center justify-center px-4 py-8"
-        style={{ borderBottom: `1px solid ${BORDER}` }}
+        className="flex items-center justify-center px-4 shrink-0"
+        style={{
+          height: "96px",
+          borderBottom: `1px solid ${BORDER}`,
+        }}
       >
         <Image
           src="/logo-estudaai.png"
           alt="EstudaAí"
           width={148}
           height={74}
-          className="object-contain w-full"
+          className="object-contain"
+          style={{ maxHeight: "72px", width: "auto" }}
           priority
         />
       </div>
