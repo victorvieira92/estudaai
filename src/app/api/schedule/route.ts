@@ -157,10 +157,71 @@ export async function GET() {
   const weekQuestions = sessionsWeek.reduce((a, s) => a + s.questions,  0);
   const targetHours   = studyBlocks.reduce((a, b) => a + b.hours, 0);
 
-  // ── Próxima ação — exclui matérias já estudadas hoje ─────────────────────
-  // ✅ Se estudou Dir. Tributário hoje, recomenda a próxima do ciclo
-  const studiedTodayIds = new Set(sessionsToday.map(s => s.subjectId));
-  const nextSubject = scored.find(s => !studiedTodayIds.has(s.id)) ?? scored[0] ?? null;
+  // ── Próxima ação — próximo bloco do ciclo não concluído ─────────────────
+  // Lógica: pega o dia atual do ciclo e os blocos marcados como feitos
+  // O ciclo usa CYCLE_KEY e DONE_KEY no localStorage do cliente
+  // Na API, usamos os blocos do dia atual na ordem e quantas sessões foram feitas hoje
+  // para determinar qual é o próximo bloco a estudar
+  
+  // Conta quantas sessões foram registradas hoje por matéria
+  const sessionCountToday = new Map<string, number>();
+  for (const s of sessionsToday) {
+    sessionCountToday.set(s.subjectId, (sessionCountToday.get(s.subjectId) ?? 0) + 1);
+  }
+  
+  // Pega os blocos do ciclo atual (CYCLE_KEY começa em 0)
+  // Como não temos acesso ao localStorage no servidor, usamos weekDay como fallback
+  // mas priorizamos a ordem dos blocos do ciclo
+  const allCycleBlocks = studyBlocks.sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.hours - b.hours);
+  
+  // Encontra o próximo bloco não estudado:
+  // Para cada bloco, verifica se o número de sessões da matéria hoje
+  // ainda é menor que o número de blocos dessa matéria no ciclo do dia
+  const usedCount = new Map<string, number>();
+  let nextBlockSubject: typeof scored[0] | null = null;
+  let nextBlockType: string | null = null;
+
+  for (const block of todayDbBlocks) {
+    if (!block.subjectId) continue;
+    const key = block.subjectId + "_" + block.blockType;
+    const used = usedCount.get(key) ?? 0;
+    const studiedCount = sessionsToday.filter(s => s.subjectId === block.subjectId).length;
+    const blockIndexForSubject = todayDbBlocks
+      .filter(b => b.subjectId === block.subjectId && b.blockType === block.blockType)
+      .indexOf(block);
+    
+    if (studiedCount <= blockIndexForSubject || used < 1) {
+      const subj = scored.find(s => s.id === block.subjectId);
+      if (subj && !nextBlockSubject) {
+        nextBlockSubject = subj;
+        nextBlockType = block.blockType;
+      }
+    }
+    usedCount.set(key, used + 1);
+  }
+
+  // Fallback: primeiro bloco do ciclo cuja matéria tem menos sessões que blocos no dia
+  if (!nextBlockSubject) {
+    // Conta blocos por matéria no dia
+    const blocksPerSubject = new Map<string, number>();
+    for (const b of todayDbBlocks) {
+      if (b.subjectId) blocksPerSubject.set(b.subjectId, (blocksPerSubject.get(b.subjectId) ?? 0) + 1);
+    }
+    // Encontra matéria onde sessões hoje < blocos no dia
+    for (const b of todayDbBlocks) {
+      if (!b.subjectId) continue;
+      const sessionsForSubject = sessionsToday.filter(s => s.subjectId === b.subjectId).length;
+      const blocksForSubject   = blocksPerSubject.get(b.subjectId) ?? 1;
+      if (sessionsForSubject < blocksForSubject) {
+        nextBlockSubject = scored.find(s => s.id === b.subjectId) ?? null;
+        nextBlockType    = b.blockType;
+        break;
+      }
+    }
+  }
+
+  // Se todos os blocos do dia foram estudados, recomenda por score
+  const nextSubject = nextBlockSubject ?? scored[0] ?? null;
 
   return NextResponse.json({
     todayBlocks,

@@ -54,7 +54,7 @@ export default function PerfilPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <h1 className="text-3xl font-bold">Minha Conta</h1>
         <p className="text-gray-400 text-sm mt-1">Gerencie suas informações e senha</p>
       </div>

@@ -133,7 +133,7 @@ function SessaoContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <p className="text-xs text-gray-500 uppercase tracking-widest mb-1">Centro Operacional</p>
         <h1 className="text-3xl font-bold">Sessão de Estudo</h1>
         <p className="text-gray-400 text-sm mt-1">Inicie o cronômetro, estude e salve automaticamente.</p>
@@ -155,7 +155,7 @@ function SessaoContent() {
         )}
 
         {/* ── Cronômetro ── */}
-        <div className="flex flex-col items-center gap-5 p-8 bg-gray-950 rounded-2xl border border-gray-800">
+        <div className="flex flex-col items-center gap-5 p-8 rounded-2xl border" style={{ backgroundColor: "#1B4040", borderColor: "rgba(255,255,255,0.1)" }}>
           <span className="text-xs text-gray-500 uppercase tracking-widest">Horas Líquidas</span>
           <span className={`text-7xl font-mono font-bold tabular-nums select-none ${
             state === "running" ? "text-green-400"

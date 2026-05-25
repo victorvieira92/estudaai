@@ -93,7 +93,7 @@ export default function EstatisticasPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-gray-950 text-white px-8 py-8">
+      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <h1 className="text-3xl font-bold">Estatísticas</h1>
         <p className="text-gray-400 text-sm mt-1">Seu desempenho completo</p>
       </div>
@@ -102,7 +102,7 @@ export default function EstatisticasPage() {
 
         {/* ── Banner de onboarding — só aparece quando não há nenhum dado ── */}
         {!hasStudyData && (
-          <div className="bg-gray-950 text-white rounded-2xl p-6 flex items-start gap-4">
+          <div className="text-white rounded-2xl p-6 flex items-start gap-4">
             <div className="w-10 h-10 bg-gray-800 rounded-xl flex items-center justify-center shrink-0">
               <TrendingUp className="w-5 h-5 text-yellow-400" />
             </div>
