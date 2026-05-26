@@ -36,8 +36,7 @@ export async function POST(req: Request) {
 
     await prisma.$transaction(async (tx) => {
       // 1. Sessão de estudo
-      await tx.studySession.create({
-        data: {
+      await tx.studySession.create({\n        data: {
           userId:     session.user!.id as string,
           subjectId,
           duration,
@@ -96,6 +95,18 @@ export async function POST(req: Request) {
             });
           }
         }
+      } else {
+        // Sem PDF: incrementa diretamente na Subject para aparecer em Materiais
+        await tx.subject.update({
+          where: { id: subjectId },
+          data: {
+            studyHours:       { increment: hours },
+            totalQuestions:   { increment: questions },
+            correctQuestions: { increment: correct },
+            wrongQuestions:   { increment: wrong },
+            lastStudyAt:      new Date(),
+          },
+        });
       }
     });
 

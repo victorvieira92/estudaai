@@ -38,6 +38,7 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(pdf.title);
   const [editCompleted, setEditCompleted] = useState(pdf.completed);
+  const [editTotalPages, setEditTotalPages] = useState(pdf.totalPages);
   const [savingPdf, setSavingPdf] = useState(false);
 
   const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
@@ -96,7 +97,7 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
     await fetch(`/api/pdfs/${pdf.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editTitle, completed: editCompleted }),
+      body: JSON.stringify({ title: editTitle, completed: editCompleted, totalPages: editTotalPages }),
     });
     setEditingTitle(false);
     onReload();
@@ -117,6 +118,9 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
           <div className="flex flex-1 items-center gap-2">
             <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
               className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+            <input type="number" min="0" value={editTotalPages} onChange={e => setEditTotalPages(+e.target.value)}
+              placeholder="Total páginas"
+              className="w-32 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
             <label className="flex items-center gap-2 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white cursor-pointer">
               <input type="checkbox" checked={editCompleted} onChange={e => setEditCompleted(e.target.checked)} className="w-4 h-4"/>
               Concluído
@@ -140,7 +144,7 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
                 </p>
               )}
             </div>
-            <button onClick={() => { setEditingTitle(true); setEditTitle(pdf.title); setEditCompleted(pdf.completed); }}
+            <button onClick={() => { setEditingTitle(true); setEditTitle(pdf.title); setEditCompleted(pdf.completed); setEditTotalPages(pdf.totalPages); }}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
               <Pencil className="w-3.5 h-3.5"/>
             </button>
