@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
   LayoutDashboard, Sun, BookOpen, RefreshCw, FileText,
-  BarChart2, CalendarDays, Zap, LogOut, Target, UserCircle,
+  BarChart2, CalendarDays, LogOut, Target, UserCircle,
   FolderOpen, TrendingUp, MessageSquare, ExternalLink,
   Cloud, GraduationCap, BookMarked, History, ScrollText,
 } from "lucide-react";
@@ -16,7 +16,6 @@ const nav = [
   { href: "/hoje",             label: "Hoje",              icon: Sun },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
-  { href: "/ciclo",            label: "Ciclo Inteligente", icon: Zap },
   { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays },
   { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp },
   { href: "/materias",         label: "Materias",          icon: Target },
@@ -49,13 +48,9 @@ export function Sidebar() {
       className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
       style={{ backgroundColor: BG }}
     >
-      {/* ── Logo com altura fixa igual ao header das páginas (py-8 + conteúdo ~96px) ── */}
       <div
         className="flex items-center justify-center px-4 shrink-0"
-        style={{
-          height: "124px",
-          borderBottom: `1px solid ${BORDER}`,
-        }}
+        style={{ height: "124px", borderBottom: `1px solid ${BORDER}` }}
       >
         <Image
           src="/logo-estudaai.png"
@@ -68,7 +63,6 @@ export function Sidebar() {
         />
       </div>
 
-      {/* ── Navegação ── */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
@@ -129,7 +123,6 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* ── Sair ── */}
       <div className="p-3" style={{ borderTop: `1px solid ${BORDER}` }}>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}

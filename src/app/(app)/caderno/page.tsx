@@ -351,6 +351,7 @@ export default function CadernoPage() {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [topic, setTopic] = useState("");
+  const [topicFocused, setTopicFocused] = useState(false);
   const [banca, setBanca] = useState("");
   const [difficulty, setDifficulty] = useState("Media");
   const [errorType, setErrorType] = useState("");
@@ -654,7 +655,37 @@ export default function CadernoPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Tópico / Conteúdo</label>
-                    <input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="Ex: Conceito de Tributo" className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                    <div className="relative">
+                      <input
+                        value={topic}
+                        onChange={e => setTopic(e.target.value)}
+                        onFocus={() => setTopicFocused(true)}
+                        onBlur={() => setTimeout(() => setTopicFocused(false), 150)}
+                        placeholder="Ex: Conceito de Tributo"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        autoComplete="off"
+                      />
+                      {topicFocused && subjectId && (() => {
+                        const subjectName = subjects.find(s => s.id === subjectId)?.name ?? "";
+                        const suggestions = [...new Set(
+                          notes
+                            .filter(n => n.subject.name === subjectName && n.topic && n.topic.toLowerCase().includes(topic.toLowerCase()))
+                            .map(n => n.topic!)
+                        )].slice(0, 8);
+                        if (!suggestions.length) return null;
+                        return (
+                          <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            {suggestions.map(s => (
+                              <li key={s}
+                                onMouseDown={() => { setTopic(s); setTopicFocused(false); }}
+                                className="px-3 py-2 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 cursor-pointer truncate">
+                                {s}
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">

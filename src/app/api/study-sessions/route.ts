@@ -26,7 +26,6 @@ export async function POST(req: Request) {
     const totalPages = safeInt(body.totalPages);
     const completed  = Boolean(body.completed ?? body.markCompleted);
 
-    // ✅ Salva category, topicName, pdfTitle, comment em notes como JSON
     const notes = JSON.stringify({
       category:  body.category  ?? "Teoria",
       topicName: body.topicName ?? "",
@@ -84,34 +83,18 @@ export async function POST(req: Request) {
 
           // 3. Revisões espaçadas
           const tomorrow = startOfTomorrow();
-          const revisoesPendentes = await tx.review.findMany({
-            where: { pdfId, completed: false },
-          });
-          if (revisoesPendentes.length > 0) {
-            await tx.review.deleteMany({ where: { pdfId, completed: false } });
-          }
+          await tx.review.deleteMany({ where: { pdfId, completed: false } });
           for (const [type, days] of [["24H",1],["7D",7],["30D",30]] as const) {
             await tx.review.create({
               data: { type, reviewDate: addDays(tomorrow, days - 1), pdfId },
             });
           }
         }
-      } else {
-        // Sem PDF: incrementa diretamente na Subject para aparecer em Materiais
-        await tx.subject.update({
-          where: { id: subjectId },
-          data: {
-            studyHours:       { increment: hours },
-            totalQuestions:   { increment: questions },
-            correctQuestions: { increment: correct },
-            wrongQuestions:   { increment: wrong },
-            lastStudyAt:      new Date(),
-          },
-        });
       }
     });
 
-    await recalcSubject(subjectId);
+    // Recalcula subject somando PDFs + sessões sem PDF
+    await recalcSubjectWithSessions(subjectId);
     if (topicId) await recalcTopic(topicId);
 
     return NextResponse.json({ ok: true });
@@ -145,22 +128,57 @@ async function recalcTopic(topicId: string) {
   });
 }
 
-async function recalcSubject(subjectId: string) {
+// Recalcula subject somando PDFs E sessões que não têm PDF vinculado
+async function recalcSubjectWithSessions(subjectId: string) {
   const sub = await prisma.subject.findUnique({
     where:   { id: subjectId },
     include: { topics: { include: { pdfs: true } } },
   });
   if (!sub) return;
+
   const pdfs = sub.topics.flatMap(t => t.pdfs);
+
+  // Soma das sessões SEM pdf associado (pdfId vazio ou nulo via notes)
+  // Usamos as StudySessions que não têm correspondente em PdfStudyLog
+  const allSessions = await prisma.studySession.findMany({
+    where: { subjectId },
+  });
+
+  // Pega todos os pdfIds que têm logs
+  const allPdfIds = new Set(
+    (await prisma.pdfStudyLog.findMany({
+      where: { pdf: { topic: { subjectId } } },
+      select: { pdfId: true },
+    })).map(l => l.pdfId)
+  );
+
+  // Sessões sem PDF = sessões cujos dados não estão em nenhum PDF
+  // Estratégia: soma das StudySessions - soma dos PDFs = contribuição das sessões sem PDF
+  const sessionsStudyHours  = allSessions.reduce((a, s) => a + s.studyHours, 0);
+  const sessionsQuestions   = allSessions.reduce((a, s) => a + s.questions, 0);
+  const sessionsCorrect     = allSessions.reduce((a, s) => a + s.correct, 0);
+  const sessionsWrong       = allSessions.reduce((a, s) => a + s.wrong, 0);
+
+  const pdfsStudyHours      = pdfs.reduce((a, p) => a + p.studyHours, 0);
+  const pdfsQuestions       = pdfs.reduce((a, p) => a + p.questions, 0);
+  const pdfsCorrect         = pdfs.reduce((a, p) => a + p.correctQuestions, 0);
+  const pdfsWrong           = pdfs.reduce((a, p) => a + p.wrongQuestions, 0);
+
+  // Total = PDFs + sessões sem PDF (o que sobra além do que já está nos PDFs)
+  const extraHours     = Math.max(0, sessionsStudyHours - pdfsStudyHours);
+  const extraQuestions = Math.max(0, sessionsQuestions  - pdfsQuestions);
+  const extraCorrect   = Math.max(0, sessionsCorrect    - pdfsCorrect);
+  const extraWrong     = Math.max(0, sessionsWrong      - pdfsWrong);
+
   await prisma.subject.update({
     where: { id: subjectId },
     data: {
       totalPdfs:        pdfs.length,
       completedPdfs:    pdfs.filter(p => p.completed).length,
-      studyHours:       pdfs.reduce((a, p) => a + p.studyHours, 0),
-      totalQuestions:   pdfs.reduce((a, p) => a + p.questions, 0),
-      correctQuestions: pdfs.reduce((a, p) => a + p.correctQuestions, 0),
-      wrongQuestions:   pdfs.reduce((a, p) => a + p.wrongQuestions, 0),
+      studyHours:       pdfsStudyHours + extraHours,
+      totalQuestions:   pdfsQuestions  + extraQuestions,
+      correctQuestions: pdfsCorrect    + extraCorrect,
+      wrongQuestions:   pdfsWrong      + extraWrong,
       progress:         pdfs.length > 0 ? Math.round((pdfs.filter(p => p.completed).length / pdfs.length) * 100) : 0,
       lastStudyAt:      new Date(),
     },

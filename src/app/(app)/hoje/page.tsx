@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Clock, RefreshCw, AlertCircle,
-  Target, ArrowRight, CheckCircle, Zap, History,
+  Target, ArrowRight, CheckCircle, Zap, History, AlertTriangle,
 } from "lucide-react";
 
 interface Block {
@@ -19,6 +19,16 @@ interface Block {
     pendingErrors: number;
     accuracy: number | null;
   } | null;
+}
+
+// Bloco do ciclo inteligente
+interface CicloBlock {
+  id:          string;
+  dayOfWeek:   number;
+  hours:       number;
+  blockType:   string;
+  subjectId:   string | null;
+  subjectName: string | null;
 }
 
 // ✅ NOVO: histórico de sessões do dia
@@ -48,6 +58,28 @@ interface Data {
   weekDay:        number;
 }
 
+const CYCLE_KEY    = "estudaai_cycle_day";
+const PENDING_KEY  = "estudaai_pending";
+const DONE_KEY     = "estudaai_done_ids";
+
+const BLOCK_TYPE_LABEL: Record<string, string> = {
+  leitura:       "Leitura PDF",
+  exercicios:    "Exercícios",
+  revisao7d:     "Revisão 7d",
+  revisao14_30d: "Revisão 14/30d",
+};
+
+function getCycleDays(blocks: CicloBlock[]): number[] {
+  return [...new Set(blocks.map(b => b.dayOfWeek))].sort((a, b) => a - b);
+}
+
+function fmtH(h: number) {
+  const totalMin = Math.round(h * 60);
+  if (totalMin < 60) return `${totalMin}min`;
+  const hh = Math.floor(totalMin / 60); const mm = totalMin % 60;
+  return mm > 0 ? `${hh}h${mm}min` : `${hh}h`;
+}
+
 const DAYS = [
   "Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira",
   "Quinta-feira", "Sexta-feira", "Sábado",
@@ -75,12 +107,33 @@ export default function HojePage() {
   const [loading,         setLoading]         = useState(true);
   const [completedBlocks, setCompletedBlocks] = useState<number[]>([]);
 
+  // Ciclo Inteligente state
+  const [cicloBlocks,    setCicloBlocks]    = useState<CicloBlock[]>([]);
+  const [currentDayIdx,  setCurrentDayIdx]  = useState(0);
+  const [pendingBlocks,  setPendingBlocks]  = useState<CicloBlock[]>([]);
+  const [doneIds,        setDoneIds]        = useState<Set<string>>(new Set());
+  const [completing,     setCompleting]     = useState(false);
+
   useEffect(() => {
     fetch(`/api/schedule?cycleDay=${localStorage.getItem('estudaai_cycle_day') ?? '0'}`)
       .then(r => r.json())
       .then(setData)
       .catch(console.error)
       .finally(() => setLoading(false));
+
+    // Carrega blocos do ciclo
+    fetch("/api/study-blocks").then(r => r.json()).then((bl: any[]) => {
+      const mapped: CicloBlock[] = Array.isArray(bl) ? bl.map(b => ({
+        id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
+        blockType: b.blockType, subjectId: b.subjectId ?? null, subjectName: b.subject?.name ?? null,
+      })) : [];
+      setCicloBlocks(mapped);
+      const days  = getCycleDays(mapped);
+      const saved = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
+      setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
+      try { setPendingBlocks(JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]")); } catch { setPendingBlocks([]); }
+      try { setDoneIds(new Set(JSON.parse(localStorage.getItem(DONE_KEY) ?? "[]"))); } catch { setDoneIds(new Set()); }
+    }).catch(console.error);
   }, []);
 
   if (loading) return (
@@ -99,6 +152,36 @@ export default function HojePage() {
   const dateStr = today.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
   const hoursTarget = data.weekStats.targetHours;
   const hoursProgress = pct(data.weekStats.hours, hoursTarget);
+
+  // Ciclo computed
+  const cycleDays   = getCycleDays(cicloBlocks);
+  const currentDay  = cycleDays[currentDayIdx] ?? -1;
+  const todayCiclo  = cicloBlocks.filter(b => b.dayOfWeek === currentDay);
+  const allCiclo    = [...pendingBlocks, ...todayCiclo];
+  const doneCount   = doneIds.size;
+  const totalCount  = allCiclo.length;
+
+  const toggleDone = (id: string) => {
+    setDoneIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      localStorage.setItem(DONE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  };
+
+  const concludeDay = () => {
+    setCompleting(true);
+    const undone  = allCiclo.filter(b => !doneIds.has(b.id));
+    const nextIdx = (currentDayIdx + 1) % cycleDays.length;
+    localStorage.setItem(CYCLE_KEY,   String(nextIdx));
+    localStorage.setItem(PENDING_KEY, JSON.stringify(undone));
+    localStorage.setItem(DONE_KEY,    "[]");
+    setCurrentDayIdx(nextIdx);
+    setPendingBlocks(undone);
+    setDoneIds(new Set());
+    setCompleting(false);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -277,128 +360,143 @@ export default function HojePage() {
           </div>
         )}
 
-        {/* Blocos de estudo de hoje */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Clock className="w-5 h-5 text-gray-400" />
-            Seus blocos de estudo hoje
-          </h2>
+        {/* ── Ciclo Inteligente do dia ──────────────────────────────────── */}
+        {cicloBlocks.length > 0 && (
           <div className="space-y-3">
-            {data.todayBlocks.length === 0 && (
-              <p className="text-sm text-gray-400 text-center py-4">
-                Nenhum bloco configurado para hoje.{" "}
-                <Link href="/calendario-ciclo" className="text-blue-600 hover:underline">
-                  Configurar calendário
-                </Link>
-              </p>
-            )}
-            {data.todayBlocks.map((block, i) => {
-              const done = completedBlocks.includes(i);
-              const now  = new Date();
-
-              const hasTime = block.start !== "—" && block.end !== "—";
-              let isNow = false;
-              let isPast = false;
-              if (hasTime) {
-                const [sh, sm] = block.start.split(":").map(Number);
-                const [eh, em] = block.end.split(":").map(Number);
-                const blockStart = new Date(now); blockStart.setHours(sh, sm, 0);
-                const blockEnd   = new Date(now); blockEnd.setHours(eh, em, 0);
-                isNow  = now >= blockStart && now <= blockEnd;
-                isPast = now > blockEnd;
-              }
-
-              return (
-                <div
-                  key={i}
-                  className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                    done    ? "bg-green-50 border-green-200"
-                    : isNow ? "bg-blue-50 border-blue-300 shadow-sm"
-                    : "border-gray-100 bg-gray-50"
-                  }`}
-                >
-                  <div className="text-center shrink-0 w-20">
-                    {hasTime ? (
-                      <>
-                        <p className="text-xs text-gray-500">{block.start}</p>
-                        <p className="text-xs text-gray-400">↓</p>
-                        <p className="text-xs text-gray-500">{block.end}</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-gray-400">{block.duration}</p>
-                    )}
-                  </div>
-
-                  <div className={`w-1 h-12 rounded-full shrink-0 ${
-                    done    ? "bg-green-500"
-                    : isNow ? "bg-blue-500"
-                    : isPast ? "bg-gray-300"
-                    : "bg-gray-200"
-                  }`} />
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      {isNow && (
-                        <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full font-medium animate-pulse">
-                          ● Agora
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-500">{block.duration}</span>
-                    </div>
-                    {block.subject ? (
-                      <>
-                        <p className="font-semibold text-gray-900">{block.subject.name}</p>
-                        {block.subject.nextPdf && (
-                          <p className="text-xs text-gray-500 truncate">
-                            📄 {block.subject.nextPdf.title}
-                          </p>
-                        )}
-                        <div className="flex gap-3 mt-1">
-                          {block.subject.pendingErrors > 0 && (
-                            <span className="text-xs text-red-600">
-                              {block.subject.pendingErrors} erros pendentes
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-400">
-                            {block.subject.accuracy !== null
-                              ? `${block.subject.accuracy}% acerto`
-                              : "sem dados de acerto"}
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-gray-500 text-sm">Sem matérias cadastradas</p>
-                    )}
-                  </div>
-
-                  {block.subject && !done && (
-                    <Link
-                      href={`/sessao?subjectId=${block.subject.id}`}
-                      className="shrink-0 text-xs bg-gray-900 hover:bg-gray-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
-                    >
-                      Começar
-                    </Link>
-                  )}
-
-                  <button
-                    onClick={() =>
-                      setCompletedBlocks(prev =>
-                        done ? prev.filter(x => x !== i) : [...prev, i]
-                      )
-                    }
-                    className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${
-                      done
-                        ? "bg-green-500 border-green-500 text-white"
-                        : "border-gray-300 hover:border-green-400"
-                    }`}
-                  >
-                    {done && <CheckCircle className="w-4 h-4" />}
+            {/* Header do ciclo */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-500" />
+                    Fila do Dia — Dia {currentDayIdx + 1} do ciclo
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-0.5">{fmtH(allCiclo.reduce((a,b)=>a+b.hours,0))} programadas</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-gray-500">{doneCount}/{totalCount}</span>
+                  <button onClick={concludeDay} disabled={completing}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-white font-semibold rounded-xl text-xs transition-colors">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {completing ? "Avançando..." : "Concluir dia"}
                   </button>
                 </div>
-              );
-            })}
+              </div>
+              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-green-500 transition-all"
+                  style={{ width: totalCount > 0 ? `${(doneCount/totalCount)*100}%` : "0%" }} />
+              </div>
+            </div>
+
+            {/* Pendentes */}
+            {pendingBlocks.length > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-2 px-1">
+                  <AlertTriangle className="w-4 h-4 text-red-500" />
+                  <p className="text-sm font-semibold text-red-600">Pendentes de dias anteriores ({pendingBlocks.length})</p>
+                </div>
+                <div className="space-y-2">
+                  {pendingBlocks.map(block => {
+                    const done = doneIds.has(block.id);
+                    const name = block.subjectName ?? "Sem matéria";
+                    return (
+                      <div key={block.id}
+                        className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${done ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Pendente</span>
+                            <span className="text-xs text-gray-500">{fmtH(block.hours)}</span>
+                            <span className="text-xs text-gray-400">{BLOCK_TYPE_LABEL[block.blockType] ?? block.blockType}</span>
+                          </div>
+                          <p className="font-semibold text-gray-900">{name}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {block.subjectId && (
+                            <Link href={`/sessao?subjectId=${block.subjectId}`}
+                              className="text-xs text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
+                              style={{ backgroundColor: "#1B4040" }}>
+                              Estudar <ArrowRight className="w-3 h-3" />
+                            </Link>
+                          )}
+                          <button onClick={() => toggleDone(block.id)}
+                            className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${done ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400"}`}>
+                            {done && <CheckCircle className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Blocos do dia */}
+            <div className="space-y-2">
+              {todayCiclo.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
+                  <p className="text-sm text-gray-400">Nenhum bloco para este dia do ciclo.{" "}
+                    <Link href="/calendario-ciclo" className="text-blue-600 hover:underline">Configurar calendário</Link>
+                  </p>
+                </div>
+              ) : todayCiclo.map((block, i) => {
+                const done = doneIds.has(block.id);
+                const name = block.subjectName ?? "Sem matéria";
+                return (
+                  <div key={block.id}
+                    className={`flex items-center gap-4 p-4 rounded-xl border-2 bg-white transition-all ${done ? "bg-green-50 border-green-200" : "border-gray-200"}`}>
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${done ? "bg-green-500 text-white" : "bg-gray-100 text-gray-600"}`}>
+                      {done ? <CheckCircle className="w-5 h-5" /> : i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <span className="text-xs text-gray-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> {fmtH(block.hours)}
+                        </span>
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                          {BLOCK_TYPE_LABEL[block.blockType] ?? block.blockType}
+                        </span>
+                      </div>
+                      <p className={`font-semibold ${done ? "line-through text-gray-400" : "text-gray-900"}`}>{name}</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {block.subjectId && !done && (
+                        <Link href={`/sessao?subjectId=${block.subjectId}`}
+                          className="text-xs text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
+                          style={{ backgroundColor: "#1B4040" }}>
+                          Começar <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      )}
+                      <button onClick={() => toggleDone(block.id)}
+                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${done ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400"}`}>
+                        {done && <CheckCircle className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Visão do ciclo completo */}
+            <div className="bg-white rounded-2xl border border-gray-200 p-4">
+              <p className="text-sm font-semibold text-gray-700 mb-3">Ciclo completo</p>
+              <div className="flex flex-wrap gap-2">
+                {cycleDays.map((day, idx) => {
+                  const dayHours = cicloBlocks.filter(b => b.dayOfWeek === day).reduce((a,b)=>a+b.hours,0);
+                  const isCurrent = idx === currentDayIdx;
+                  return (
+                    <div key={day} className="flex flex-col items-center px-4 py-2 rounded-xl border-2 text-sm"
+                      style={isCurrent
+                        ? { borderColor: "#1B4040", backgroundColor: "#1B4040", color: "#fff" }
+                        : { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", color: "#6B7280" }}>
+                      <span className="font-bold">Dia {idx + 1}</span>
+                      <span className="text-xs mt-0.5 opacity-70">{fmtH(dayHours)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Revisões do dia */}
         {data.reviews.length > 0 && (
