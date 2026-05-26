@@ -13,7 +13,7 @@ async function recalcPdf(pdfId: string) {
 
   const questions        = logs.reduce((a, l) => a + l.questions, 0);
   const correctQuestions = logs.reduce((a, l) => a + l.correctQuestions, 0);
-  const wrongQuestions   = Math.max(0, questions - correctQuestions);
+  const wrongQuestions   = logs.reduce((a, l) => a + l.wrongQuestions, 0); // ← soma real dos erros
   const studyHours       = logs.reduce((a, l) => a + l.studyHours, 0);
   const lastPageStudied  = logs.length > 0 ? Math.max(...logs.map(l => l.endPage)) : 0;
 
@@ -22,22 +22,32 @@ async function recalcPdf(pdfId: string) {
     data: { questions, correctQuestions, wrongQuestions, studyHours, lastPageStudied },
   });
 
-  // Recalcula matéria
+  // Recalcula matéria com os PDFs já atualizados
   const sub = await prisma.subject.findUnique({
     where: { id: pdf.topic.subject.id },
     include: { topics: { include: { pdfs: true } } },
   });
   if (!sub) return;
   const pdfs = sub.topics.flatMap(t => t.pdfs);
+
+  // Usa os valores recém-calculados para o PDF atual
+  const updatedPdfs = pdfs.map(p =>
+    p.id === pdfId
+      ? { ...p, questions, correctQuestions, wrongQuestions, studyHours }
+      : p
+  );
+
   await prisma.subject.update({
     where: { id: sub.id },
     data: {
-      totalQuestions:   pdfs.reduce((a, p) => a + p.questions, 0),
-      correctQuestions: pdfs.reduce((a, p) => a + p.correctQuestions, 0),
-      wrongQuestions:   pdfs.reduce((a, p) => a + p.wrongQuestions, 0),
-      studyHours:       pdfs.reduce((a, p) => a + p.studyHours, 0),
-      completedPdfs:    pdfs.filter(p => p.completed).length,
-      progress:         pdfs.length > 0 ? Math.round((pdfs.filter(p => p.completed).length / pdfs.length) * 100) : 0,
+      totalQuestions:   updatedPdfs.reduce((a, p) => a + p.questions, 0),
+      correctQuestions: updatedPdfs.reduce((a, p) => a + p.correctQuestions, 0),
+      wrongQuestions:   updatedPdfs.reduce((a, p) => a + p.wrongQuestions, 0),
+      studyHours:       updatedPdfs.reduce((a, p) => a + p.studyHours, 0),
+      completedPdfs:    updatedPdfs.filter(p => p.completed).length,
+      progress:         updatedPdfs.length > 0
+        ? Math.round((updatedPdfs.filter(p => p.completed).length / updatedPdfs.length) * 100)
+        : 0,
     },
   });
 }
@@ -55,7 +65,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const questions        = body.questions        != null ? Number(body.questions)        : log.questions;
   const correctQuestions = body.correctQuestions != null ? Number(body.correctQuestions) : log.correctQuestions;
-  const wrongQuestions   = Math.max(0, questions - correctQuestions);
+  // Usa wrongQuestions do body se fornecido; senão calcula como diferença
+  const wrongQuestions   = body.wrongQuestions   != null
+    ? Number(body.wrongQuestions)
+    : Math.max(0, questions - correctQuestions);
 
   const updated = await prisma.pdfStudyLog.update({
     where: { id: params.id },
