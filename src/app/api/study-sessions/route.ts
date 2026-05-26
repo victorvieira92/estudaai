@@ -36,7 +36,8 @@ export async function POST(req: Request) {
 
     await prisma.$transaction(async (tx) => {
       // 1. Sessão de estudo
-      await tx.studySession.create({\n        data: {
+      await tx.studySession.create({
+        data: {
           userId:     session.user!.id as string,
           subjectId,
           duration,
