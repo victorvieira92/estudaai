@@ -7,21 +7,15 @@ function toBRDate(date: Date): string {
   const br = new Date(date.getTime() - 3 * 60 * 60 * 1000);
   return br.toISOString().slice(0, 10);
 }
-
-function todayBR(): string {
-  return toBRDate(new Date());
-}
+function todayBR(): string { return toBRDate(new Date()); }
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({}, { status: 401 });
-
   const uid = session.user.id as string;
 
   const todayUTC = new Date();
   todayUTC.setHours(0, 0, 0, 0);
-  const todayEndUTC = new Date(todayUTC);
-  todayEndUTC.setHours(23, 59, 59, 999);
 
   const [subjects, errorNotes, reviews, allSessions] = await Promise.all([
     prisma.subject.findMany({
@@ -42,43 +36,73 @@ export async function GET() {
   ]);
 
   const allPdfs        = subjects.flatMap(s => s.topics.flatMap(t => t.pdfs));
-  const totalHours     = subjects.reduce((a, s) => a + s.studyHours, 0);
-  const totalQuestions = subjects.reduce((a, s) => a + s.totalQuestions, 0);
-  const totalCorrect   = subjects.reduce((a, s) => a + s.correctQuestions, 0);
-  const totalWrong     = subjects.reduce((a, s) => a + s.wrongQuestions, 0);
   const pendingReviews = reviews.filter(r => !r.completed).length;
   const lateReviews    = reviews.filter(r => !r.completed && new Date(r.reviewDate) < todayUTC).length;
 
-  // ── Horas por dia (últimos 7 dias) ───────────────────────────────────────
-  const DAYS = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-  const weekMap: Record<string, { label: string; hours: number }> = {};
+  // ── KPIs globais — calculados direto das StudySessions (fonte única) ──────
+  const totalHours     = allSessions.reduce((a, s) => a + s.studyHours, 0);
+  const totalQuestions = allSessions.reduce((a, s) => a + s.questions, 0);
+  const totalCorrect   = allSessions.reduce((a, s) => a + s.correct, 0);
+  const totalWrong     = allSessions.reduce((a, s) => a + s.wrong, 0);
+
+  // ── Stats por disciplina — também via StudySessions ───────────────────────
+  const subjectSessionMap = new Map<string, {
+    name: string; hours: number; questions: number; correct: number; wrong: number;
+  }>();
+  for (const subj of subjects) {
+    subjectSessionMap.set(subj.id, {
+      name: subj.name, hours: 0, questions: 0, correct: 0, wrong: 0,
+    });
+  }
+  for (const s of allSessions) {
+    const entry = subjectSessionMap.get(s.subjectId);
+    if (entry) {
+      entry.hours     += s.studyHours;
+      entry.questions += s.questions;
+      entry.correct   += s.correct;
+      entry.wrong     += s.wrong;
+    }
+  }
+  const subjectStats = Array.from(subjectSessionMap.values()).map(s => ({
+    name:      s.name,
+    hours:     parseFloat(s.hours.toFixed(1)),
+    questions: s.questions,
+    correct:   s.correct,
+    wrong:     s.wrong,
+    accuracy:  s.questions > 0
+      ? parseFloat(((s.correct / s.questions) * 100).toFixed(1))
+      : null,
+  }));
+
+  // ── Horas por dia (últimos 7 dias) ────────────────────────────────────────
+  const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  const weekMap: Record<string, { label: string; hours: number; questions: number; correct: number; wrong: number }> = {};
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const ds = toBRDate(d);
-    weekMap[ds] = { label: DAYS[d.getDay()], hours: 0 };
+    weekMap[ds] = { label: DAYS_BR[d.getDay()], hours: 0, questions: 0, correct: 0, wrong: 0 };
   }
-  allSessions.forEach(s => {
+  for (const s of allSessions) {
     const ds = toBRDate(new Date(s.createdAt));
-    if (ds in weekMap) weekMap[ds].hours += s.studyHours;
-  });
+    if (ds in weekMap) {
+      weekMap[ds].hours     += s.studyHours;
+      weekMap[ds].questions += s.questions;
+      weekMap[ds].correct   += s.correct;
+      weekMap[ds].wrong     += s.wrong;
+    }
+  }
   const weeklyHours = Object.values(weekMap).map(({ label, hours }) => ({
     day: label, hours: parseFloat(hours.toFixed(1)),
   }));
 
-  // ── Constância ───────────────────────────────────────────────────────────
-  const sessionDatesBR = new Set(
-    allSessions.map(s => toBRDate(new Date(s.createdAt)))
-  );
-
+  // ── Constância ────────────────────────────────────────────────────────────
+  const sessionDatesBR = new Set(allSessions.map(s => toBRDate(new Date(s.createdAt))));
   const todayDS  = todayBR();
   const msPerDay = 86400000;
 
-  // Streak: dias consecutivos até hoje
   let streak  = 0;
-  let checkTS = sessionDatesBR.has(todayDS)
-    ? Date.now()
-    : Date.now() - msPerDay;
+  let checkTS = sessionDatesBR.has(todayDS) ? Date.now() : Date.now() - msPerDay;
   while (true) {
     const ds = toBRDate(new Date(checkTS));
     if (!sessionDatesBR.has(ds)) break;
@@ -102,64 +126,46 @@ export async function GET() {
   }
 
   // ── Estudos de hoje ───────────────────────────────────────────────────────
-  const todaySessions = allSessions.filter(
-    s => toBRDate(new Date(s.createdAt)) === todayDS
-  );
+  const todaySessions  = allSessions.filter(s => toBRDate(new Date(s.createdAt)) === todayDS);
   const todayHours     = todaySessions.reduce((a, s) => a + s.studyHours, 0);
   const todayQuestions = todaySessions.reduce((a, s) => a + s.questions, 0);
 
-  const subjectMap = new Map<string, number>();
+  const todaySubjectMap = new Map<string, number>();
   for (const s of todaySessions) {
     const subj = subjects.find(sub => sub.id === s.subjectId);
-    if (subj) subjectMap.set(subj.name, (subjectMap.get(subj.name) ?? 0) + s.studyHours);
+    if (subj) todaySubjectMap.set(subj.name, (todaySubjectMap.get(subj.name) ?? 0) + s.studyHours);
   }
-  const todayBySubject = Array.from(subjectMap.entries()).map(([name, hours]) => ({
+  const todayBySubject = Array.from(todaySubjectMap.entries()).map(([name, hours]) => ({
     name, hours: parseFloat(hours.toFixed(2)),
   }));
 
-  // ── Stats por disciplina ──────────────────────────────────────────────────
-  const subjectStats = subjects.map(s => ({
-    name:      s.name,
-    hours:     parseFloat(s.studyHours.toFixed(1)),
-    questions: s.totalQuestions,
-    correct:   s.correctQuestions,
-    wrong:     s.wrongQuestions,
-    accuracy:  s.totalQuestions > 0
-      ? parseFloat(((s.correctQuestions / s.totalQuestions) * 100).toFixed(1))
-      : null,
-  }));
-
-  // ── Dados semanais com horas + questões (últimas 8 semanas) ──────────────
-  const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-  
-  function getWeekData(weekOffset: number): { day: string; date: string; hours: number; questions: number }[] {
+  // ── Dados semanais navegáveis (últimas 8 semanas) ─────────────────────────
+  function getWeekData(weekOffset: number) {
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - dayOfWeek - (weekOffset * 7));
-    monday.setHours(0, 0, 0, 0);
-    
-    const result = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
+    const dow = now.getDay();
+    const sunday = new Date(now);
+    sunday.setDate(now.getDate() - dow - weekOffset * 7);
+    sunday.setHours(0, 0, 0, 0);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(sunday);
+      d.setDate(sunday.getDate() + i);
       const ds = toBRDate(d);
       const daySessions = allSessions.filter(s => toBRDate(new Date(s.createdAt)) === ds);
-      result.push({
+      return {
         day:       DAYS_BR[d.getDay()],
         date:      ds,
         hours:     parseFloat(daySessions.reduce((a, s) => a + s.studyHours, 0).toFixed(1)),
         questions: daySessions.reduce((a, s) => a + s.questions, 0),
-      });
-    }
-    return result;
+        correct:   daySessions.reduce((a, s) => a + s.correct, 0),
+        wrong:     daySessions.reduce((a, s) => a + s.wrong, 0),
+      };
+    });
   }
 
   const weeksData = Array.from({ length: 8 }, (_, i) => {
-    const weekDays = getWeekData(i);
-    const startDate = weekDays[0].date;
-    const endDate   = weekDays[6].date;
-    return { weekOffset: i, startDate, endDate, days: weekDays };
+    const days = getWeekData(i);
+    return { weekOffset: i, startDate: days[0].date, endDate: days[6].date, days };
   });
 
   return NextResponse.json({

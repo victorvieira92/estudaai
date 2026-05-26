@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
-  Clock, CheckCircle, Flame, RefreshCw, BookOpen,
+  CheckCircle, Flame, RefreshCw, BookOpen,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
@@ -13,7 +13,7 @@ import {
 
 const BG = "#1B4040";
 
-interface WeekDay { day: string; date: string; hours: number; questions: number; }
+interface WeekDay { day: string; date: string; hours: number; questions: number; correct: number; wrong: number; }
 interface WeekData { weekOffset: number; startDate: string; endDate: string; days: WeekDay[]; }
 
 interface Stats {
@@ -46,7 +46,6 @@ function fmtH(h: number) {
   const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
   return mm > 0 ? `${hh}h${mm.toString().padStart(2,"0")}min` : `${hh}h`;
 }
-
 function fmtDate(ds: string) {
   const d = new Date(ds + "T12:00:00");
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -56,7 +55,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const [stats,      setStats]      = useState<Stats | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [weekOffset, setWeekOffset] = useState(0);   // 0 = semana atual
+  const [weekOffset, setWeekOffset] = useState(0);
   const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
 
   useEffect(() => {
@@ -67,15 +66,15 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Semana atual selecionada
-  const currentWeek = stats?.weeksData?.find(w => w.weekOffset === weekOffset);
-  const chartData   = currentWeek?.days ?? stats?.weeklyHours?.map(w => ({ ...w, questions: 0, date: "" })) ?? [];
-
-  const weekLabel = currentWeek
-    ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}`
-    : "";
-
+  const currentWeek   = stats?.weeksData?.find(w => w.weekOffset === weekOffset);
+  const chartData     = currentWeek?.days ?? [];
+  const weekLabel     = currentWeek ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}` : "";
   const maxWeekOffset = (stats?.weeksData?.length ?? 1) - 1;
+
+  // Metas semanais — soma da semana atual (weekOffset=0)
+  const currentWeekData = stats?.weeksData?.find(w => w.weekOffset === 0);
+  const weekTotalHours  = currentWeekData?.days.reduce((a, d) => a + d.hours, 0) ?? 0;
+  const weekTotalQ      = currentWeekData?.days.reduce((a, d) => a + d.questions, 0) ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -234,7 +233,7 @@ export default function DashboardPage() {
           {/* Coluna direita */}
           <div className="space-y-4">
 
-            {/* Metas semanal */}
+            {/* Metas semanal — calculadas da semana atual */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Metas de Estudo Semanal</h2>
               {stats ? (
@@ -242,11 +241,11 @@ export default function DashboardPage() {
                   <div>
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span>Horas de Estudo</span>
-                      <span>{fmtH(stats.weeklyHours.reduce((a,w) => a + w.hours, 0))}</span>
+                      <span>{fmtH(weekTotalHours)}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full transition-all" style={{
-                        width: `${Math.min(100, (stats.weeklyHours.reduce((a,w) => a + w.hours, 0) / 20) * 100)}%`,
+                        width: `${Math.min(100, (weekTotalHours / 20) * 100)}%`,
                         backgroundColor: BG,
                       }} />
                     </div>
@@ -254,11 +253,11 @@ export default function DashboardPage() {
                   <div>
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span>Questões</span>
-                      <span>{stats.totalQuestions}</span>
+                      <span>{weekTotalQ}</span>
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div className="h-full rounded-full bg-purple-500 transition-all" style={{
-                        width: `${Math.min(100, (stats.totalQuestions / 300) * 100)}%`,
+                        width: `${Math.min(100, (weekTotalQ / 300) * 100)}%`,
                       }} />
                     </div>
                   </div>
@@ -270,7 +269,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* ✅ Gráfico semanal com navegação + botões Tempo/Questões */}
+            {/* Gráfico semanal com acertos/erros empilhados */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudo Semanal</h2>
@@ -316,30 +315,55 @@ export default function DashboardPage() {
               </div>
 
               {chartData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={140}>
-                  <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                    <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip
-                      formatter={(v: number) =>
-                        chartMode === "hours"
-                          ? [`${v.toFixed(1)}h`, "Horas"]
-                          : [`${v}`, "Questões"]
-                      }
-                    />
-                    <Bar
-                      dataKey={chartMode === "hours" ? "hours" : "questions"}
-                      radius={[3,3,0,0]}
-                      fill={chartMode === "hours" ? BG : "#10B981"}
-                      label={{ position: "top", fontSize: 9, fill: "#6B7280",
-                        formatter: (v: number) => v > 0 ? (chartMode === "hours" ? `${v.toFixed(1)}h` : v) : "" }}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+                chartMode === "hours" ? (
+                  // Modo Tempo — barra simples
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip formatter={(v: number) => [`${v.toFixed(1)}h`, "Horas"]} />
+                      <Bar dataKey="hours" radius={[3,3,0,0]} fill={BG}
+                        label={{ position: "top", fontSize: 9, fill: "#6B7280",
+                          formatter: (v: number) => v > 0 ? `${v.toFixed(1)}h` : "" }} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  // Modo Questões — barras empilhadas: acertos (verde) + erros (vermelho)
+                  <ResponsiveContainer width="100%" height={140}>
+                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip
+                        formatter={(v: number, name: string) => [
+                          v,
+                          name === "correct" ? "Acertos" : name === "wrong" ? "Erros" : "Questões",
+                        ]}
+                      />
+                      <Bar dataKey="correct" stackId="q" fill="#22c55e" name="correct"
+                        radius={[0,0,0,0]} />
+                      <Bar dataKey="wrong" stackId="q" fill="#ef4444" name="wrong"
+                        radius={[3,3,0,0]}
+                        label={{ position: "top", fontSize: 9, fill: "#6B7280",
+                          formatter: (_: number, __: string, props: any) => {
+                            const total = (props?.correct ?? 0) + (props?.wrong ?? 0);
+                            return total > 0 ? total : "";
+                          }}} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )
               ) : (
                 <div className="h-36 flex items-center justify-center text-xs text-gray-400">
                   Sem registros nesta semana
+                </div>
+              )}
+
+              {/* Legenda do gráfico de questões */}
+              {chartMode === "questions" && (
+                <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Acertos</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Erros</span>
                 </div>
               )}
             </div>
@@ -392,8 +416,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex gap-4">
               {[
-                { label: "Atrasadas", value: stats.lateReviews,                         color: "text-red-600"  },
-                { label: "Pendentes", value: stats.pendingReviews - stats.lateReviews,   color: "text-blue-600" },
+                { label: "Atrasadas", value: stats.lateReviews,                       color: "text-red-600"  },
+                { label: "Pendentes", value: stats.pendingReviews - stats.lateReviews, color: "text-blue-600" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="bg-gray-50 rounded-xl px-5 py-3 text-center">
                   <p className="text-xs text-gray-400 mb-1">{label}</p>
