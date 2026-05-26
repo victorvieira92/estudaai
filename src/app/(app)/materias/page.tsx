@@ -2,11 +2,24 @@
 import { useState, useEffect, useCallback } from "react";
 import { Plus, ChevronDown, ChevronUp, BookOpen, Trash2, Pencil, Check, X, RotateCcw } from "lucide-react";
 
-interface PdfLog {
-  id: string; createdAt: string; studyHours: number;
-  startPage: number; endPage: number;
-  questions: number; correctQuestions: number; wrongQuestions: number;
+// Sessão vinda de /api/historico (mesma estrutura do Histórico)
+interface HistoricoSession {
+  id:             string;
+  subjectId:      string;
+  subjectName:    string;
+  hours:          number;
+  hoursFormatted: string;
+  questions:      number;
+  correct:        number;
+  wrong:          number;
+  accuracy:       number | null;
+  createdAt:      string;
+  category:       string;
+  topicName:      string;
+  pdfTitle:       string;
+  comment:        string;
 }
+
 interface Pdf {
   id: string; title: string; completed: boolean;
   totalPages: number; lastPageStudied: number; studyHours: number;
@@ -26,71 +39,35 @@ function accuracy(correct: number, total: number) { return total > 0 ? Math.roun
 function fmtHours(h: number) { return `${h.toFixed(1)}h`; }
 
 // ── PdfCard ──────────────────────────────────────────────────────────────────
-function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: string; topicId: string; onReload: () => void; }) {
-  const [logs, setLogs] = useState<PdfLog[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [logsLoaded, setLogsLoaded] = useState(false);
-  const [editingLog, setEditingLog] = useState<string | null>(null);
-  const [editLogData, setEditLogData] = useState({ studyHours: 0, questions: 0, correctQuestions: 0, wrongQuestions: 0 });
-  const [newLog, setNewLog] = useState({ studyHours: "", questions: "", correctQuestions: "", wrongQuestions: "" });
-  const [savingLog, setSavingLog] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
+function PdfCard({
+  pdf, subjectId, onReload, allSessions,
+}: {
+  pdf: Pdf;
+  subjectId: string;
+  onReload: () => void;
+  allSessions: HistoricoSession[]; // já carregadas pela página pai
+}) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(pdf.title);
   const [editCompleted, setEditCompleted] = useState(pdf.completed);
   const [editTotalPages, setEditTotalPages] = useState(pdf.totalPages);
   const [savingPdf, setSavingPdf] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
   const acc = accuracy(pdf.correctQuestions, pdf.questions);
 
-  const loadLogs = useCallback(async () => {
-    setLoadingLogs(true);
-    const res = await fetch(`/api/pdf-study-log?pdfId=${pdf.id}`).then(r => r.json()).catch(() => []);
-    setLogs(Array.isArray(res) ? res : []);
-    setLoadingLogs(false);
-    setLogsLoaded(true);
-  }, [pdf.id]);
+  // Filtra sessões do histórico que pertencem a este PDF (mesmo subjectId + pdfTitle bate)
+  const pdfSessions = allSessions.filter(
+    s => s.subjectId === subjectId && s.pdfTitle.trim() === pdf.title.trim()
+  );
 
-  useEffect(() => { loadLogs(); }, [loadLogs]);
-
-  const addLog = async () => {
-    if (!newLog.studyHours && !newLog.questions) return;
-    setSavingLog(true);
-    const questions = toNum(newLog.questions);
-    const correctQuestions = toNum(newLog.correctQuestions);
-    const wrongQuestions = toNum(newLog.wrongQuestions) || Math.max(0, questions - correctQuestions);
-    await fetch("/api/pdf-study-log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pdfId: pdf.id, studyHours: toNum(newLog.studyHours), questions, correctQuestions, wrongQuestions }),
-    });
-    setNewLog({ studyHours: "", questions: "", correctQuestions: "", wrongQuestions: "" });
-    loadLogs();
-    onReload();
-    setSavingLog(false);
-  };
-
-  const saveLog = async (id: string) => {
-    setSavingLog(true);
-    const wrongQuestions = editLogData.wrongQuestions || Math.max(0, editLogData.questions - editLogData.correctQuestions);
-    await fetch(`/api/pdf-study-log/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...editLogData, wrongQuestions }),
-    });
-    setEditingLog(null);
-    loadLogs();
-    onReload();
-    setSavingLog(false);
-  };
-
-  const deleteLog = async (id: string) => {
-    if (!confirm("Excluir este registro?")) return;
-    await fetch(`/api/pdf-study-log/${id}`, { method: "DELETE" });
-    loadLogs();
-    onReload();
-  };
+  // KPIs calculados direto das sessões (fonte única de verdade = StudySession)
+  const totalHours     = pdfSessions.reduce((a, s) => a + s.hours, 0);
+  const totalQuestions = pdfSessions.reduce((a, s) => a + s.questions, 0);
+  const totalCorrect   = pdfSessions.reduce((a, s) => a + s.correct, 0);
+  const totalWrong     = pdfSessions.reduce((a, s) => a + s.wrong, 0);
+  const totalAcc       = accuracy(totalCorrect, totalQuestions);
 
   const savePdf = async () => {
     setSavingPdf(true);
@@ -107,6 +84,12 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
   const deletePdf = async () => {
     if (!confirm("Excluir este PDF e todo o seu histórico?")) return;
     await fetch(`/api/pdfs/${pdf.id}`, { method: "DELETE" });
+    onReload();
+  };
+
+  const deleteSession = async (id: string) => {
+    if (!confirm("Excluir este registro de estudo?")) return;
+    await fetch(`/api/historico?id=${id}`, { method: "DELETE" });
     onReload();
   };
 
@@ -144,11 +127,13 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
                 </p>
               )}
             </div>
-            <button onClick={() => { setEditingTitle(true); setEditTitle(pdf.title); setEditCompleted(pdf.completed); setEditTotalPages(pdf.totalPages); }}
+            <button
+              onClick={() => { setEditingTitle(true); setEditTitle(pdf.title); setEditCompleted(pdf.completed); setEditTotalPages(pdf.totalPages); }}
               className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
               <Pencil className="w-3.5 h-3.5"/>
             </button>
-            <button onClick={() => { fetch(`/api/pdfs/${pdf.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: !pdf.completed }) }).then(() => onReload()); }}
+            <button
+              onClick={() => fetch(`/api/pdfs/${pdf.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: !pdf.completed }) }).then(() => onReload())}
               className={`p-1.5 rounded-lg transition-colors hover:bg-gray-200 ${pdf.completed ? "text-yellow-500" : "text-gray-400 hover:text-green-600"}`}
               title={pdf.completed ? "Desmarcar" : "Marcar concluído"}>
               <RotateCcw className="w-3.5 h-3.5"/>
@@ -160,14 +145,14 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
         )}
       </div>
 
-      {/* KPIs do PDF */}
+      {/* KPIs calculados das sessões */}
       <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
         {[
-          { label: "Total horas", value: fmtHours(pdf.studyHours), color: "" },
-          { label: "Total questões", value: toNum(pdf.questions), color: "" },
-          { label: "Total acertos", value: toNum(pdf.correctQuestions), color: "text-green-600" },
-          { label: "Total erros", value: toNum(pdf.wrongQuestions), color: "text-red-600" },
-          { label: "Acurácia", value: `${acc}%`, color: acc >= 70 ? "text-green-600" : acc >= 50 ? "text-yellow-600" : acc > 0 ? "text-red-600" : "" },
+          { label: "Total horas",    value: fmtHours(totalHours),    color: "" },
+          { label: "Total questões", value: totalQuestions,           color: "" },
+          { label: "Total acertos",  value: totalCorrect,             color: "text-green-600" },
+          { label: "Total erros",    value: totalWrong,               color: "text-red-600" },
+          { label: "Acurácia",       value: `${totalAcc}%`,           color: totalAcc >= 70 ? "text-green-600" : totalAcc >= 50 ? "text-yellow-600" : totalAcc > 0 ? "text-red-600" : "" },
         ].map(({ label, value, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-200 p-3">
             <p className="text-xs text-gray-500">{label}</p>
@@ -176,129 +161,83 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
         ))}
       </div>
 
-      {/* Formulário novo estudo */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: "Nova carga de horas", key: "studyHours", placeholder: "Ex: 1.5", step: "0.1" },
-          { label: "Novas questões", key: "questions", placeholder: "Ex: 50" },
-          { label: "Novos acertos", key: "correctQuestions", placeholder: "Ex: 40" },
-          { label: "Novos erros", key: "wrongQuestions", placeholder: "Ex: 10" },
-        ].map(({ label, key, placeholder, step }) => (
-          <div key={key}>
-            <label className="text-xs text-gray-500">{label}</label>
-            <input
-              type="number" min="0" step={step} placeholder={placeholder}
-              value={(newLog as any)[key]}
-              onChange={e => setNewLog(d => ({ ...d, [key]: e.target.value }))}
-              className="w-full mt-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-            />
-          </div>
-        ))}
-        <div className="flex items-end">
-          <button onClick={addLog} disabled={savingLog}
-            className="w-full px-4 py-2.5 bg-gray-900 hover:bg-gray-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-50">
-            {savingLog ? "..." : "Adicionar"}
-          </button>
-        </div>
-      </div>
-
-      {/* Histórico */}
+      {/* Histórico de Estudos — mesmos dados do Histórico */}
       <div className="mt-5">
         <button
           type="button"
-          onClick={() => { if (!showHistory) loadLogs(); setShowHistory(h => !h); }}
+          onClick={() => setShowHistory(h => !h)}
           className="w-full flex items-center justify-between py-2 text-left group"
         >
-          <h4 className="font-bold text-gray-900">Histórico de Estudos {logs.length > 0 && <span className="text-gray-400 font-normal text-sm">({logs.length})</span>}</h4>
-          <span className="text-xs text-gray-400 group-hover:text-gray-700 transition-colors">{showHistory ? "▲ Fechar" : "▼ Ver histórico"}</span>
+          <h4 className="font-bold text-gray-900">
+            Histórico de Estudos{" "}
+            {pdfSessions.length > 0 && (
+              <span className="text-gray-400 font-normal text-sm">({pdfSessions.length})</span>
+            )}
+          </h4>
+          <span className="text-xs text-gray-400 group-hover:text-gray-700 transition-colors">
+            {showHistory ? "▲ Fechar" : "▼ Ver histórico"}
+          </span>
         </button>
+
         {showHistory && (
-          loadingLogs ? (
-            <p className="text-sm text-gray-400 mt-2">Carregando...</p>
-          ) : logs.length === 0 ? (
+          pdfSessions.length === 0 ? (
             <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-400 text-center mt-2">
               Nenhum estudo registrado ainda.
             </div>
           ) : (
             <div className="space-y-2 mt-2">
-            {logs.map(log => {
-              const logAcc = accuracy(log.correctQuestions, log.questions);
-              const isEditingThis = editingLog === log.id;
-              return (
-                <div key={log.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                  {isEditingThis ? (
-                    <div className="space-y-3">
-                      <p className="text-xs font-bold text-gray-500">{fmtDate(log.createdAt)}</p>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                        {[
-                          { label: "Horas", key: "studyHours", step: "0.1" },
-                          { label: "Questões", key: "questions" },
-                          { label: "Acertos", key: "correctQuestions" },
-                          { label: "Erros", key: "wrongQuestions" },
-                        ].map(({ label, key, step }) => (
-                          <div key={key}>
-                            <label className="text-xs text-gray-500">{label}</label>
-                            <input type="number" min="0" step={step}
-                              value={(editLogData as any)[key]}
-                              onChange={e => setEditLogData(d => ({ ...d, [key]: +e.target.value }))}
-                              className="w-full mt-0.5 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => saveLog(log.id)} disabled={savingLog}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white rounded-lg text-xs font-bold disabled:opacity-50">
-                          <Check className="w-3.5 h-3.5"/> Salvar
-                        </button>
-                        <button onClick={() => setEditingLog(null)}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-xs">
-                          <X className="w-3.5 h-3.5"/> Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
+              {pdfSessions.map(s => {
+                const sAcc = accuracy(s.correct, s.questions);
+                return (
+                  <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
-                        <p className="text-xs font-bold text-gray-700 mb-2">{fmtDate(log.createdAt)}</p>
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="text-xs font-bold text-gray-700">{fmtDate(s.createdAt)}</p>
+                          {s.category && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+                              {s.category}
+                            </span>
+                          )}
+                        </div>
                         <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
                           <div>
                             <p className="text-xs text-gray-500">Horas</p>
-                            <p className="font-bold text-sm">{fmtHours(log.studyHours)}</p>
+                            <p className="font-bold text-sm">{s.hoursFormatted}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Questões</p>
-                            <p className="font-bold text-sm">{log.questions}</p>
+                            <p className="font-bold text-sm">{s.questions}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Acertos</p>
-                            <p className="font-bold text-sm text-green-600">{log.correctQuestions}</p>
+                            <p className="font-bold text-sm text-green-600">{s.correct}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Erros</p>
-                            <p className="font-bold text-sm text-red-600">{log.wrongQuestions}</p>
+                            <p className="font-bold text-sm text-red-600">{s.wrong}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Acurácia</p>
-                            <p className={`font-bold text-sm ${logAcc >= 70 ? "text-green-600" : logAcc >= 50 ? "text-yellow-600" : "text-red-600"}`}>{logAcc}%</p>
+                            <p className={`font-bold text-sm ${sAcc >= 70 ? "text-green-600" : sAcc >= 50 ? "text-yellow-600" : sAcc > 0 ? "text-red-600" : "text-gray-400"}`}>
+                              {s.questions > 0 ? `${sAcc}%` : "—"}
+                            </p>
                           </div>
                         </div>
+                        {s.comment && (
+                          <p className="mt-2 text-xs text-gray-500 italic">💬 {s.comment}</p>
+                        )}
                       </div>
-                      <div className="flex gap-1 shrink-0">
-                        <button onClick={() => { setEditingLog(log.id); setEditLogData({ studyHours: log.studyHours, questions: log.questions, correctQuestions: log.correctQuestions, wrongQuestions: log.wrongQuestions }); }}
-                          className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                          <Pencil className="w-3.5 h-3.5"/>
-                        </button>
-                        <button onClick={() => deleteLog(log.id)}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-                          <Trash2 className="w-3.5 h-3.5"/>
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => deleteSession(s.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
+                        <Trash2 className="w-3.5 h-3.5"/>
+                      </button>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
           )
         )}
       </div>
@@ -308,52 +247,84 @@ function PdfCard({ pdf, subjectId, topicId, onReload }: { pdf: Pdf; subjectId: s
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function MateriasPage() {
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [name, setName] = useState(""); const [ew, setEw] = useState("5"); const [crit, setCrit] = useState("5");
-  const [topicName, setTopicName] = useState(""); const [topicSubjectId, setTopicSubjectId] = useState("");
-  const [pdfTitle, setPdfTitle] = useState(""); const [pdfTopicId, setPdfTopicId] = useState(""); const [pdfPages, setPdfPages] = useState("0");
-  const [saving, setSaving] = useState(false); const [error, setError] = useState("");
-  const [recalculating, setRecalculating] = useState(false); const [recalcDone, setRecalcDone] = useState(false);
+  const [subjects, setSubjects]   = useState<Subject[]>([]);
+  const [allSessions, setAllSessions] = useState<HistoricoSession[]>([]);
+  const [expanded, setExpanded]   = useState<string | null>(null);
+  const [name, setName]           = useState("");
+  const [ew, setEw]               = useState("5");
+  const [crit, setCrit]           = useState("5");
+  const [topicName, setTopicName] = useState("");
+  const [topicSubjectId, setTopicSubjectId] = useState("");
+  const [pdfTitle, setPdfTitle]   = useState("");
+  const [pdfTopicId, setPdfTopicId] = useState("");
+  const [pdfPages, setPdfPages]   = useState("0");
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState("");
+  const [recalculating, setRecalculating] = useState(false);
+  const [recalcDone, setRecalcDone]       = useState(false);
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
   const [editSubjectData, setEditSubjectData] = useState({ name: "", editalWeight: 5, criticality: 5 });
-  const [editingTopic, setEditingTopic] = useState<string | null>(null);
-  const [editTopicName, setEditTopicName] = useState("");
+  const [editingTopic, setEditingTopic]     = useState<string | null>(null);
+  const [editTopicName, setEditTopicName]   = useState("");
 
   const load = useCallback(() => {
-    fetch("/api/subjects").then(r => r.json()).then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? []))).catch(console.error);
+    // Carrega matérias
+    fetch("/api/subjects")
+      .then(r => r.json())
+      .then(d => setSubjects(Array.isArray(d) ? d : (d.subjects ?? [])))
+      .catch(console.error);
+
+    // Carrega TODAS as sessões do histórico (mesma fonte do Histórico)
+    fetch("/api/historico")
+      .then(r => r.json())
+      .then((days: { sessions: HistoricoSession[] }[]) => {
+        if (!Array.isArray(days)) return;
+        const sessions = days.flatMap(d => d.sessions);
+        setAllSessions(sessions);
+      })
+      .catch(console.error);
   }, []);
+
   useEffect(() => { load(); }, [load]);
 
   const addSubject = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError("");
-    const res = await fetch("/api/subjects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, editalWeight: +ew, criticality: +crit }) });
+    const res = await fetch("/api/subjects", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, editalWeight: +ew, criticality: +crit }),
+    });
     if (res.ok) { setName(""); load(); } else { const d = await res.json(); setError(d.message); }
     setSaving(false);
   };
+
   const saveSubject = async (id: string) => {
     setSaving(true);
     await fetch(`/api/subjects/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(editSubjectData) });
     setEditingSubject(null); load(); setSaving(false);
   };
+
   const deleteSubject = async (id: string) => {
     if (!confirm("Excluir esta matéria?")) return;
     await fetch(`/api/subjects/${id}`, { method: "DELETE" }); load();
   };
+
   const addTopic = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     await fetch("/api/topics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: topicName, subjectId: topicSubjectId }) });
     setTopicName(""); load(); setSaving(false);
   };
+
   const saveTopic = async (id: string) => {
     setSaving(true);
     await fetch(`/api/topics/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editTopicName }) });
     setEditingTopic(null); load(); setSaving(false);
   };
+
   const deleteTopic = async (id: string) => {
     if (!confirm("Excluir este tópico?")) return;
     await fetch(`/api/topics/${id}`, { method: "DELETE" }); load();
   };
+
   const addPdf = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     await fetch("/api/pdfs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: pdfTitle, topicId: pdfTopicId, totalPages: +pdfPages }) });
@@ -373,14 +344,13 @@ export default function MateriasPage() {
     <div className="min-h-screen bg-gray-50">
       <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
         <h1 className="text-3xl font-bold">Matérias</h1>
-        <p className="text-gray-400 text-sm mt-1">Cadastre disciplinas, tópicos, PDFs e acompanhe o histórico de estudos.</p>
+        <p className="text-gray-400 text-sm mt-1">Cadastre disciplinas, tópicos e PDFs. O histórico é sincronizado com a Sessão de Estudos.</p>
       </div>
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
+
         {/* Nova matéria */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Nova matéria</h2>
-          </div>
+          <h2 className="text-lg font-semibold mb-4">Nova matéria</h2>
           <form onSubmit={addSubject} className="space-y-4">
             <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Direito Constitucional" required
               className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
@@ -411,10 +381,22 @@ export default function MateriasPage() {
         {/* Lista de matérias */}
         <div className="space-y-4">
           {subjects.map(s => {
-            const acc = accuracy(s.correctQuestions, s.totalQuestions);
+            // KPIs da matéria calculados das sessões (sem PDF = sessões onde pdfTitle está vazio)
+            const subjectSessions = allSessions.filter(ss => ss.subjectId === s.id);
+            const sessionsComPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() !== "");
+            const sessionsSemPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() === "");
+
+            const horasComPdf  = sessionsComPdf.reduce((a, ss) => a + ss.hours, 0);
+            const horasSemPdf  = sessionsSemPdf.reduce((a, ss) => a + ss.hours, 0);
+            const totalHoras   = horasComPdf + horasSemPdf;
+
+            const totalQ = subjectSessions.reduce((a, ss) => a + ss.questions, 0);
+            const totalC = subjectSessions.reduce((a, ss) => a + ss.correct, 0);
+            const totalW = subjectSessions.reduce((a, ss) => a + ss.wrong, 0);
+            const acc    = accuracy(totalC, totalQ);
+
             return (
               <div key={s.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                {/* Header */}
                 {editingSubject === s.id ? (
                   <div className="flex items-center gap-3 px-6 py-4 bg-blue-50 border-b border-blue-100">
                     <input value={editSubjectData.name} onChange={e => setEditSubjectData(d => ({ ...d, name: e.target.value }))}
@@ -423,11 +405,11 @@ export default function MateriasPage() {
                       <span>Peso</span>
                       <input type="number" min="1" max="10" value={editSubjectData.editalWeight}
                         onChange={e => setEditSubjectData(d => ({ ...d, editalWeight: +e.target.value }))}
-                        className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center"/>
                       <span>Crit</span>
                       <input type="number" min="1" max="10" value={editSubjectData.criticality}
                         onChange={e => setEditSubjectData(d => ({ ...d, criticality: +e.target.value }))}
-                        className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        className="w-14 border border-gray-300 rounded-lg px-2 py-2 text-sm text-center"/>
                     </div>
                     <button onClick={() => saveSubject(s.id)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><Check className="w-4 h-4"/></button>
                     <button onClick={() => setEditingSubject(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4"/></button>
@@ -446,9 +428,13 @@ export default function MateriasPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-                          <p className="text-xs text-gray-500">{s.studyHours.toFixed(1)}h estudadas</p>
-                          <p className="text-xs text-gray-500">{s.totalQuestions} questões</p>
-                          {s.totalQuestions > 0 && <p className={`text-xs font-medium ${acc >= 70 ? "text-green-600" : acc >= 50 ? "text-yellow-600" : "text-red-600"}`}>{acc}% acerto</p>}
+                          <p className="text-xs text-gray-500">{totalHoras.toFixed(1)}h estudadas</p>
+                          <p className="text-xs text-gray-500">{totalQ} questões</p>
+                          {totalQ > 0 && (
+                            <p className={`text-xs font-medium ${acc >= 70 ? "text-green-600" : acc >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+                              {acc}% acerto
+                            </p>
+                          )}
                           <p className="text-xs text-gray-400">Peso: {s.editalWeight}/10 · Crit: {s.criticality}/10</p>
                         </div>
                         {s.totalPdfs > 0 && (
@@ -461,7 +447,8 @@ export default function MateriasPage() {
                     <div className="flex items-center gap-1 shrink-0">
                       <button onClick={() => { setEditingSubject(s.id); setEditSubjectData({ name: s.name, editalWeight: s.editalWeight, criticality: s.criticality }); setExpanded(s.id); }}
                         className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3.5 h-3.5"/></button>
-                      <button onClick={() => deleteSubject(s.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={() => deleteSubject(s.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5"/></button>
                       <button onClick={() => setExpanded(expanded === s.id ? null : s.id)} className="p-1.5 text-gray-400">
                         {expanded === s.id ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
                       </button>
@@ -471,7 +458,25 @@ export default function MateriasPage() {
 
                 {expanded === s.id && (
                   <div className="border-t border-gray-100 px-6 py-5 space-y-5 bg-gray-50">
-                    {/* Novo tópico — no topo */}
+
+                    {/* Sessões sem PDF vinculado */}
+                    {sessionsSemPdf.length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <p className="text-xs font-bold text-amber-700 mb-2 uppercase tracking-wide">
+                          Sessões sem PDF vinculado ({sessionsSemPdf.length})
+                        </p>
+                        <div className="space-y-2">
+                          {sessionsSemPdf.map(ss => (
+                            <div key={ss.id} className="flex items-center justify-between text-xs text-amber-800 bg-white rounded-lg px-3 py-2 border border-amber-100">
+                              <span>{fmtDate(ss.createdAt)} · {ss.hoursFormatted} · {ss.category}</span>
+                              <span className="text-gray-500">{ss.questions > 0 ? `${ss.correct}✓ ${ss.wrong}✗` : "Sem questões"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Novo tópico */}
                     <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
                       <input
                         value={topicSubjectId === s.id ? topicName : ""}
@@ -513,7 +518,7 @@ export default function MateriasPage() {
                               value={pdfTopicId === t.id ? pdfTitle : ""}
                               onChange={e => { setPdfTopicId(t.id); setPdfTitle(e.target.value); }}
                               onClick={() => setPdfTopicId(t.id)}
-                              placeholder="Ex: PDF 01 - CPC 27" required
+                              placeholder="Ex: Aula 00" required
                               className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
                           </div>
                           <div>
@@ -538,7 +543,13 @@ export default function MateriasPage() {
                             </div>
                           ) : (
                             t.pdfs.map(p => (
-                              <PdfCard key={p.id} pdf={p} subjectId={s.id} topicId={t.id} onReload={load}/>
+                              <PdfCard
+                                key={p.id}
+                                pdf={p}
+                                subjectId={s.id}
+                                onReload={load}
+                                allSessions={allSessions}
+                              />
                             ))
                           )}
                         </div>
@@ -549,7 +560,9 @@ export default function MateriasPage() {
               </div>
             );
           })}
-          {subjects.length === 0 && <div className="text-center py-12 text-gray-400">Nenhuma matéria cadastrada ainda.</div>}
+          {subjects.length === 0 && (
+            <div className="text-center py-12 text-gray-400">Nenhuma matéria cadastrada ainda.</div>
+          )}
         </div>
       </div>
     </div>
