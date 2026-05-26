@@ -23,7 +23,7 @@ export async function GET() {
   const todayEndUTC = new Date(todayUTC);
   todayEndUTC.setHours(23, 59, 59, 999);
 
-  const [subjects, errorNotes, reviews, allSessions, studyBlocks] = await Promise.all([
+  const [subjects, errorNotes, reviews, allSessions] = await Promise.all([
     prisma.subject.findMany({
       where:   { userId: uid },
       include: { topics: { include: { pdfs: true } } },
@@ -38,10 +38,6 @@ export async function GET() {
     prisma.studySession.findMany({
       where:   { userId: uid },
       orderBy: { createdAt: "asc" },
-    }),
-    // Blocos do ciclo semanal — usamos para saber quais matérias eram previstas por dia
-    prisma.studyBlock.findMany({
-      where: { userId: uid },
     }),
   ]);
 
@@ -70,43 +66,22 @@ export async function GET() {
     day: label, hours: parseFloat(hours.toFixed(1)),
   }));
 
-  // ── Constância com 3 estados ─────────────────────────────────────────────
-  // Verde   (status: "full")    = todas matérias previstas do dia foram estudadas
-  // Amarelo (status: "partial") = pelo menos 1 matéria estudada, mas não todas
-  // Vermelho(status: "missed")  = nenhuma matéria estudada num dia com ciclo previsto
-  // Cinza   (status: "free")    = dia sem ciclo previsto e sem estudo (dia livre)
-
-  // Monta set de datas com sessões
-  const sessionsByDate = new Map<string, Set<string>>(); // date → Set<subjectId>
-  for (const s of allSessions) {
-    const ds = toBRDate(new Date(s.createdAt));
-    if (!sessionsByDate.has(ds)) sessionsByDate.set(ds, new Set());
-    sessionsByDate.get(ds)!.add(s.subjectId);
-  }
-
-  // Blocos do ciclo agrupados por dayOfWeek → Set<subjectId> previstos
-  // dayOfWeek: 0=Dom, 1=Seg, ... 6=Sáb
-  const cycleByDow = new Map<number, Set<string>>(); // dayOfWeek → Set<subjectId>
-  for (const b of studyBlocks) {
-    if (!b.subjectId) continue; // bloco sem matéria vinculada (ex: revisão genérica)
-    const dow = (b as any).dayOfWeek as number;
-    if (!cycleByDow.has(dow)) cycleByDow.set(dow, new Set());
-    cycleByDow.get(dow)!.add(b.subjectId);
-  }
-
-  const hasCycle = studyBlocks.length > 0;
+  // ── Constância ───────────────────────────────────────────────────────────
+  const sessionDatesBR = new Set(
+    allSessions.map(s => toBRDate(new Date(s.createdAt)))
+  );
 
   const todayDS  = todayBR();
   const msPerDay = 86400000;
 
   // Streak: dias consecutivos até hoje
   let streak  = 0;
-  let checkTS = sessionsByDate.has(todayDS)
+  let checkTS = sessionDatesBR.has(todayDS)
     ? Date.now()
     : Date.now() - msPerDay;
   while (true) {
     const ds = toBRDate(new Date(checkTS));
-    if (!sessionsByDate.has(ds)) break;
+    if (!sessionDatesBR.has(ds)) break;
     streak++;
     checkTS -= msPerDay;
   }
@@ -116,41 +91,14 @@ export async function GET() {
   const firstMs      = new Date(firstDS + "T12:00:00").getTime();
   const todayMs      = new Date(todayDS + "T12:00:00").getTime();
   const totalDays    = Math.max(1, Math.round((todayMs - firstMs) / msPerDay) + 1);
-  const studiedDays  = sessionsByDate.size;
+  const studiedDays  = sessionDatesBR.size;
   const consistency  = Math.round((studiedDays / totalDays) * 100);
 
-  // Gera dots com status de 3 níveis
+  const consistencyDots: { date: string; studied: boolean }[] = [];
   const daysToShow = Math.min(totalDays, 90);
-  const consistencyDots: {
-    date: string;
-    studied: boolean;        // mantido por compatibilidade
-    status: "full" | "partial" | "missed" | "free";
-  }[] = [];
-
   for (let i = daysToShow - 1; i >= 0; i--) {
-    const dateMs  = todayMs - i * msPerDay;
-    const ds      = toBRDate(new Date(dateMs));
-    const dow     = new Date(ds + "T12:00:00").getDay();
-    const studied = sessionsByDate.get(ds) ?? new Set<string>();
-    const planned = hasCycle ? (cycleByDow.get(dow) ?? new Set<string>()) : new Set<string>();
-
-    let status: "full" | "partial" | "missed" | "free";
-
-    if (planned.size === 0) {
-      // Dia sem ciclo configurado para este dia da semana
-      status = studied.size > 0 ? "full" : "free";
-    } else {
-      const studiedPlanned = [...planned].filter(sid => studied.has(sid)).length;
-      if (studiedPlanned === planned.size) {
-        status = "full";
-      } else if (studied.size > 0) {
-        status = "partial";
-      } else {
-        status = "missed";
-      }
-    }
-
-    consistencyDots.push({ date: ds, studied: studied.size > 0, status });
+    const ds = toBRDate(new Date(todayMs - i * msPerDay));
+    consistencyDots.push({ date: ds, studied: sessionDatesBR.has(ds) });
   }
 
   // ── Estudos de hoje ───────────────────────────────────────────────────────
@@ -183,14 +131,14 @@ export async function GET() {
 
   // ── Dados semanais com horas + questões (últimas 8 semanas) ──────────────
   const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-
+  
   function getWeekData(weekOffset: number): { day: string; date: string; hours: number; questions: number }[] {
     const now = new Date();
     const dayOfWeek = now.getDay();
     const monday = new Date(now);
     monday.setDate(now.getDate() - dayOfWeek - (weekOffset * 7));
     monday.setHours(0, 0, 0, 0);
-
+    
     const result = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
@@ -209,7 +157,9 @@ export async function GET() {
 
   const weeksData = Array.from({ length: 8 }, (_, i) => {
     const weekDays = getWeekData(i);
-    return { weekOffset: i, startDate: weekDays[0].date, endDate: weekDays[6].date, days: weekDays };
+    const startDate = weekDays[0].date;
+    const endDate   = weekDays[6].date;
+    return { weekOffset: i, startDate, endDate, days: weekDays };
   });
 
   return NextResponse.json({

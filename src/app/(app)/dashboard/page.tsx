@@ -16,12 +16,6 @@ const BG = "#1B4040";
 interface WeekDay { day: string; date: string; hours: number; questions: number; }
 interface WeekData { weekOffset: number; startDate: string; endDate: string; days: WeekDay[]; }
 
-interface ConsistencyDot {
-  date:    string;
-  studied: boolean;
-  status:  "full" | "partial" | "missed" | "free";
-}
-
 interface Stats {
   totalHours:      number;
   totalQuestions:  number;
@@ -37,7 +31,7 @@ interface Stats {
   studiedDays:     number;
   totalDays:       number;
   consistency:     number;
-  consistencyDots: ConsistencyDot[];
+  consistencyDots: { date: string; studied: boolean }[];
   todayHours:      number;
   todayQuestions:  number;
   todayBySubject:  { name: string; hours: number }[];
@@ -58,30 +52,11 @@ function fmtDate(ds: string) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-// ── Dot de constância com 3 estados ──────────────────────────────────────────
-function ConsistencyDotEl({ dot }: { dot: ConsistencyDot }) {
-  const map = {
-    full:    { bg: "bg-green-500",  icon: <CheckCircle className="w-3.5 h-3.5 text-white" />,        title: "Todas as matérias concluídas" },
-    partial: { bg: "bg-yellow-400", icon: <span className="text-[13px] leading-none">⚠️</span>,       title: "Dia parcial — algumas matérias pendentes" },
-    missed:  { bg: "bg-red-400",    icon: <span className="text-[13px] leading-none">✕</span>,        title: "Nenhuma matéria estudada" },
-    free:    { bg: "bg-gray-100",   icon: null,                                                        title: "Dia livre" },
-  };
-  const { bg, icon, title } = map[dot.status];
-  return (
-    <div
-      title={`${dot.date} — ${title}`}
-      className={`w-6 h-6 rounded-md flex items-center justify-center ${bg} ${dot.status === "missed" ? "text-white font-bold text-xs" : ""}`}
-    >
-      {icon}
-    </div>
-  );
-}
-
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [stats,      setStats]      = useState<Stats | null>(null);
   const [loading,    setLoading]    = useState(true);
-  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);   // 0 = semana atual
   const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
 
   useEffect(() => {
@@ -92,14 +67,15 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Semana atual selecionada
   const currentWeek = stats?.weeksData?.find(w => w.weekOffset === weekOffset);
   const chartData   = currentWeek?.days ?? stats?.weeklyHours?.map(w => ({ ...w, questions: 0, date: "" })) ?? [];
-  const weekLabel   = currentWeek ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}` : "";
-  const maxWeekOffset = (stats?.weeksData?.length ?? 1) - 1;
 
-  // Legenda dinâmica: mostra "Parcial" e "Não estudou" só se existirem nos dots
-  const hasPartial = stats?.consistencyDots.some(d => d.status === "partial") ?? false;
-  const hasMissed  = stats?.consistencyDots.some(d => d.status === "missed")  ?? false;
+  const weekLabel = currentWeek
+    ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}`
+    : "";
+
+  const maxWeekOffset = (stats?.weeksData?.length ?? 1) - 1;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -177,41 +153,20 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-
-          {/* Dots */}
           <div className="flex flex-wrap gap-1.5">
             {stats?.consistencyDots.map((dot, i) => (
-              <ConsistencyDotEl key={i} dot={dot} />
+              <div key={i} title={dot.date}
+                className={`w-6 h-6 rounded-md flex items-center justify-center ${dot.studied ? "bg-green-500" : "bg-gray-100"}`}>
+                {dot.studied && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+              </div>
             ))}
             {!stats && Array.from({ length: 7 }).map((_, i) => (
               <div key={i} className="w-6 h-6 rounded-md bg-gray-100 animate-pulse" />
             ))}
           </div>
-
-          {/* Legenda */}
-          <div className="flex items-center gap-4 mt-3 text-xs text-gray-500 flex-wrap">
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded-sm bg-green-500 inline-flex items-center justify-center">
-                <CheckCircle className="w-2.5 h-2.5 text-white" />
-              </span>
-              Concluído
-            </span>
-            {hasPartial && (
-              <span className="flex items-center gap-1.5">
-                <span className="w-4 h-4 rounded-sm bg-yellow-400 inline-flex items-center justify-center text-[10px]">⚠️</span>
-                Parcial
-              </span>
-            )}
-            {hasMissed && (
-              <span className="flex items-center gap-1.5">
-                <span className="w-4 h-4 rounded-sm bg-red-400 inline-flex items-center justify-center text-white font-bold text-[10px]">✕</span>
-                Não estudou
-              </span>
-            )}
-            <span className="flex items-center gap-1.5">
-              <span className="w-4 h-4 rounded-sm bg-gray-100 border border-gray-200 inline-block" />
-              Dia livre
-            </span>
+          <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Estudou</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block" /> Não estudou</span>
           </div>
         </div>
 
@@ -315,7 +270,7 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* Gráfico semanal */}
+            {/* ✅ Gráfico semanal com navegação + botões Tempo/Questões */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudo Semanal</h2>
@@ -337,6 +292,8 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Botões Tempo / Questões */}
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={() => setChartMode("hours")}
@@ -357,6 +314,7 @@ export default function DashboardPage() {
                   Questões
                 </button>
               </div>
+
               {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={140}>
                   <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
