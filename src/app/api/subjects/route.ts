@@ -19,7 +19,8 @@ export async function GET() {
             select: {
               id: true, title: true, completed: true,
               totalPages: true, lastPageStudied: true,
-              studyHours: true, questions: true, correctQuestions: true,
+              studyHours: true, questions: true,
+              correctQuestions: true, wrongQuestions: true,
             },
           },
         },
