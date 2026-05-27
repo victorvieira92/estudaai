@@ -299,7 +299,13 @@ export default function MateriasPage() {
       .catch(console.error);
   }, []);
 
+  // Carrega ao montar e toda vez que a aba volta ao foco (ex: usuário navegou de Sessão → Materiais)
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
 
   const addSubject = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError("");

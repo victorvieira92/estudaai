@@ -269,9 +269,23 @@ function SessaoContent() {
               </div>
               <div>
                 <label className={labelCls}>Material</label>
-                <input type="text" value={material} onChange={e => setMaterial(e.target.value)}
+                <input
+                  type="text"
+                  list="material-suggestions"
+                  value={material}
+                  onChange={e => setMaterial(e.target.value)}
                   placeholder="Ex.: Aula 01"
-                  className="w-full border-b-2 border-teal-400 outline-none text-sm bg-transparent py-2 text-gray-800 focus:border-teal-600" />
+                  className="w-full border-b-2 border-teal-400 outline-none text-sm bg-transparent py-2 text-gray-800 focus:border-teal-600"
+                />
+                {/* Sugestões dos PDFs do tópico selecionado */}
+                <datalist id="material-suggestions">
+                  {topic?.pdfs.map(p => (
+                    <option key={p.id} value={p.title} />
+                  ))}
+                  {!topic && subject?.topics.flatMap(t => t.pdfs).map(p => (
+                    <option key={p.id} value={p.title} />
+                  ))}
+                </datalist>
               </div>
             </div>
 
