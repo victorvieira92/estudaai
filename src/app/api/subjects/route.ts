@@ -13,10 +13,10 @@ export async function GET() {
       orderBy: { name: "asc" },
       include: {
         topics: {
-          orderBy: { name: "asc" },
+          orderBy: { createdAt: "asc" },
           include: {
             pdfs: {
-              orderBy: { title: "asc" },
+              orderBy: { createdAt: "asc" },
               select: {
                 id: true, title: true, completed: true,
                 totalPages: true, lastPageStudied: true,
