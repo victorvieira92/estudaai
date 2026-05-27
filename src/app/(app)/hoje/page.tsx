@@ -119,7 +119,7 @@ export default function HojePage() {
   const [completing,     setCompleting]     = useState(false);
 
   useEffect(() => {
-    fetch(`/api/schedule?cycleDay=${localStorage.getItem('estudaai_cycle_day') ?? '0'}`)
+    fetch(`/api/schedule?cycleDay=${localStorage.getItem(getCycleKey(uid)) ?? '0'}`)
       .then(r => r.json())
       .then(setData)
       .catch(console.error)
@@ -377,8 +377,31 @@ export default function HojePage() {
                   </h2>
                   <p className="text-xs text-gray-500 mt-0.5">{fmtH(allCiclo.reduce((a,b)=>a+b.hours,0))} programadas</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-500">{doneCount}/{totalCount}</span>
+                  {/* Botões de navegação manual do ciclo */}
+                  <button
+                    title="Dia anterior"
+                    onClick={() => {
+                      const prev = (currentDayIdx - 1 + cycleDays.length) % cycleDays.length;
+                      setCurrentDayIdx(prev);
+                      localStorage.setItem(getCycleKey(uid), String(prev));
+                      setDoneIds(new Set());
+                      localStorage.setItem(getDoneKey(uid), "[]");
+                    }}
+                    className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold transition-colors"
+                  >‹</button>
+                  <button
+                    title="Próximo dia"
+                    onClick={() => {
+                      const next = (currentDayIdx + 1) % cycleDays.length;
+                      setCurrentDayIdx(next);
+                      localStorage.setItem(getCycleKey(uid), String(next));
+                      setDoneIds(new Set());
+                      localStorage.setItem(getDoneKey(uid), "[]");
+                    }}
+                    className="flex items-center justify-center w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold transition-colors"
+                  >›</button>
                   <button onClick={concludeDay} disabled={completing}
                     className="flex items-center gap-1.5 px-4 py-2 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-white font-semibold rounded-xl text-xs transition-colors">
                     <CheckCircle className="w-3.5 h-3.5" />
@@ -488,13 +511,22 @@ export default function HojePage() {
                   const dayHours = cicloBlocks.filter(b => b.dayOfWeek === day).reduce((a,b)=>a+b.hours,0);
                   const isCurrent = idx === currentDayIdx;
                   return (
-                    <div key={day} className="flex flex-col items-center px-4 py-2 rounded-xl border-2 text-sm"
+                    <button
+                      key={day}
+                      title={`Ir para Dia ${idx + 1}`}
+                      onClick={() => {
+                        setCurrentDayIdx(idx);
+                        localStorage.setItem(getCycleKey(uid), String(idx));
+                        setDoneIds(new Set());
+                        localStorage.setItem(getDoneKey(uid), "[]");
+                      }}
+                      className="flex flex-col items-center px-4 py-2 rounded-xl border-2 text-sm transition-all hover:scale-105"
                       style={isCurrent
                         ? { borderColor: "#1B4040", backgroundColor: "#1B4040", color: "#fff" }
                         : { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", color: "#6B7280" }}>
                       <span className="font-bold">Dia {idx + 1}</span>
                       <span className="text-xs mt-0.5 opacity-70">{fmtH(dayHours)}</span>
-                    </div>
+                    </button>
                   );
                 })}
               </div>

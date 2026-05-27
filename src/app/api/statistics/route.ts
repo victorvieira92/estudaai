@@ -36,7 +36,11 @@ export async function GET() {
   ]);
 
   const allPdfs        = subjects.flatMap(s => s.topics.flatMap(t => t.pdfs));
-  const pendingReviews = reviews.filter(r => !r.completed).length;
+  // Usa a mesma lógica da rota /api/reviews: só conta revisões cuja data já chegou
+  // reviews com reviewDate futuro NÃO são exibidas na aba Revisões, portanto não devem
+  // aparecer no dashboard como pendentes
+  const todayEndUTC = new Date(todayUTC); todayEndUTC.setHours(23, 59, 59, 999);
+  const pendingReviews = reviews.filter(r => !r.completed && new Date(r.reviewDate) <= todayEndUTC).length;
   const lateReviews    = reviews.filter(r => !r.completed && new Date(r.reviewDate) < todayUTC).length;
 
   // ── KPIs globais — calculados direto das StudySessions (fonte única) ──────

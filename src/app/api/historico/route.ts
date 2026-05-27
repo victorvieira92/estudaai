@@ -126,6 +126,37 @@ export async function DELETE(req: Request) {
   });
   if (!existing) return NextResponse.json({ message: "Sessão não encontrada." }, { status: 404 });
 
+  // Antes de deletar a sessão, tenta limpar reviews órfãs do pdfId associado
+  // (reviews criadas por sessões que foram deletadas ficam no banco indefinidamente)
+  try {
+    const meta = existing.notes ? JSON.parse(existing.notes) : {};
+    // Busca o pdfId pelo título armazenado no notes, se existir
+    if (meta.pdfTitle && meta.pdfTitle.trim()) {
+      const pdf = await prisma.pdf.findFirst({
+        where: {
+          title: { equals: meta.pdfTitle.trim(), mode: "insensitive" },
+          topic: { subject: { userId: uid } },
+        },
+      });
+      if (pdf) {
+        // Verifica se ainda há outras sessões ativas para este PDF
+        // Se não houver, remove as reviews pendentes órfãs
+        const otherSessions = await prisma.studySession.count({
+          where: {
+            id:        { not: id },
+            userId:    uid,
+            subjectId: existing.subjectId,
+          },
+        });
+        if (otherSessions === 0) {
+          await prisma.review.deleteMany({
+            where: { pdfId: pdf.id, completed: false },
+          });
+        }
+      }
+    }
+  } catch { /* ignora erros de limpeza — não impede o delete */ }
+
   await prisma.studySession.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
