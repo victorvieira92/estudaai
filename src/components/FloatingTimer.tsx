@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import { useStudyTimer } from "@/hooks/useStudyTimer";
 import { useCountdown } from "@/hooks/useCountdown";
-import { Play, Pause, RotateCcw, Timer, Clock, ChevronDown, Minus, X, GripHorizontal } from "lucide-react";
+import { Play, Pause, RotateCcw, Timer, Clock, ChevronDown, Minus, GripHorizontal } from "lucide-react";
 
 const BG = "#1B4040";
 const TIMER_PRESETS = [15, 25, 30, 45, 50, 60, 90];
@@ -10,38 +11,62 @@ const TIMER_PRESETS = [15, 25, 30, 45, 50, 60, 90];
 type ViewMode = "bubble" | "expanded" | "floating";
 
 export function FloatingTimer() {
-  const [view, setView]         = useState<ViewMode>("bubble");
-  const [mode, setMode]         = useState<"cronometro" | "timer">("cronometro");
+  const { data: authSession } = useSession();
+  const uid = authSession?.user?.id;
+
+  const [view,      setView]      = useState<ViewMode>("bubble");
+  const [mode,      setMode]      = useState<"cronometro" | "timer">("cronometro");
   const [timerMins, setTimerMins] = useState(25);
-  const [mounted, setMounted]   = useState(false);
-  const [pos, setPos]           = useState({ x: 20, y: 80 });
+  const [mounted,   setMounted]   = useState(false);
+  const [pos,       setPos]       = useState({ x: 20, y: 80 });
   const dragging   = useRef(false);
   const dragOffset = useRef({ x: 0, y: 0 });
 
-  const timer     = useStudyTimer();
-  const countdown = useCountdown();
+  // Passa uid para os hooks — chaves localStorage isoladas por usuário
+  const timer     = useStudyTimer(uid);
+  const countdown = useCountdown(uid);
 
   useEffect(() => { setMounted(true); }, []);
   if (!mounted) return null;
 
-  const isRunning = mode === "cronometro" ? timer.state === "running" : countdown.state === "running";
-  const isPaused  = mode === "cronometro" ? timer.state === "paused"  : countdown.state === "paused";
-  const isIdle    = mode === "cronometro" ? timer.state === "idle"    : countdown.state === "idle";
-  const isDone    = mode === "timer" && countdown.state === "done";
+  // ── Estado derivado da nova interface dos hooks ──────────────────────────
+  // useStudyTimer: { elapsed, running, formatted, start, pause, reset }
+  // useCountdown:  { remaining, totalSecs, running, finished, formatted, progress, start, pause, resume, reset }
+
+  const isRunning = mode === "cronometro" ? timer.running    : countdown.running;
+  const isPaused  = mode === "cronometro"
+    ? (!timer.running && timer.elapsed > 0)
+    : (!countdown.running && countdown.remaining > 0 && !countdown.finished);
+  const isIdle    = mode === "cronometro"
+    ? (!timer.running && timer.elapsed === 0)
+    : (countdown.remaining === 0 && !countdown.finished && !countdown.running);
+  const isDone    = mode === "timer" && countdown.finished;
   const isActive  = !isIdle;
+
   const displayTime = mode === "cronometro" ? timer.formatted : countdown.formatted;
 
   const handleStart = () => {
     if (mode === "cronometro") {
-      if (isIdle) timer.start(); else if (isPaused) timer.resume();
+      timer.start();
     } else {
-      if (isIdle) { countdown.setDuration(timerMins); setTimeout(() => countdown.start(), 50); }
-      else if (isPaused) countdown.resume();
-      else if (isDone) { countdown.reset(); setTimeout(() => { countdown.setDuration(timerMins); setTimeout(() => countdown.start(), 50); }, 50); }
+      if (isIdle || isDone) {
+        if (isDone) countdown.reset();
+        setTimeout(() => countdown.start(timerMins * 60), 50);
+      } else if (isPaused) {
+        countdown.resume();
+      }
     }
   };
-  const handlePause = () => { if (mode === "cronometro") timer.pause(); else countdown.pause(); };
-  const handleReset = () => { if (mode === "cronometro") timer.reset(); else countdown.reset(); };
+
+  const handlePause = () => {
+    if (mode === "cronometro") timer.pause();
+    else countdown.pause();
+  };
+
+  const handleReset = () => {
+    if (mode === "cronometro") timer.reset();
+    else countdown.reset();
+  };
 
   // ── BUBBLE ────────────────────────────────────────────────────────────────
   if (view === "bubble") {
@@ -50,7 +75,7 @@ export function FloatingTimer() {
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl text-white text-sm font-semibold transition-all hover:scale-105 active:scale-95"
         style={{ backgroundColor: BG, border: "2px solid rgba(255,255,255,0.15)" }}>
         {isRunning ? <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          : isDone ? <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+          : isDone  ? <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
           : isPaused ? <span className="w-2 h-2 rounded-full bg-yellow-300" />
           : <Timer size={14} />}
         <span className="font-mono tracking-wider">{displayTime}</span>
@@ -58,7 +83,7 @@ export function FloatingTimer() {
     );
   }
 
-  // ── FLOATING (janela arrastável) ──────────────────────────────────────────
+  // ── FLOATING (janela arrastável) ───────────────────────────────────────────
   if (view === "floating") {
     const onMouseDown = (e: React.MouseEvent) => {
       dragging.current = true;
@@ -67,7 +92,11 @@ export function FloatingTimer() {
         if (!dragging.current) return;
         setPos({ x: ev.clientX - dragOffset.current.x, y: ev.clientY - dragOffset.current.y });
       };
-      const onUp = () => { dragging.current = false; window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+      const onUp = () => {
+        dragging.current = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", onUp);
     };
@@ -84,9 +113,9 @@ export function FloatingTimer() {
           </div>
           <div className="flex gap-1.5">
             <button onClick={() => setView("expanded")} title="Expandir"
-              className="w-4 h-4 rounded-full bg-yellow-400 hover:bg-yellow-300 flex items-center justify-center transition-colors" />
-            <button onClick={() => setView("bubble")} title="Fechar para bolinha"
-              className="w-4 h-4 rounded-full bg-red-400 hover:bg-red-300 flex items-center justify-center transition-colors" />
+              className="w-4 h-4 rounded-full bg-yellow-400 hover:bg-yellow-300 transition-colors" />
+            <button onClick={() => setView("bubble")} title="Minimizar"
+              className="w-4 h-4 rounded-full bg-red-400 hover:bg-red-300 transition-colors" />
           </div>
         </div>
         {/* Time */}
@@ -96,7 +125,8 @@ export function FloatingTimer() {
             : <span className="font-mono text-3xl font-bold tracking-widest">{displayTime}</span>}
           {mode === "timer" && isActive && !isDone && (
             <div className="mt-2 h-1 rounded-full bg-white/20 overflow-hidden">
-              <div className="h-full rounded-full bg-green-400 transition-all duration-500" style={{ width: `${countdown.pct}%` }} />
+              <div className="h-full rounded-full bg-green-400 transition-all duration-500"
+                style={{ width: `${countdown.progress}%` }} />
             </div>
           )}
         </div>
@@ -167,10 +197,12 @@ export function FloatingTimer() {
         <div className="px-4 mb-2">
           <div className="relative">
             <select value={timerMins}
-              onChange={e => { const v = Number(e.target.value); setTimerMins(v); countdown.setDuration(v); }}
+              onChange={e => setTimerMins(Number(e.target.value))}
               className="w-full appearance-none rounded-lg px-3 py-2 text-sm text-white pr-8"
               style={{ backgroundColor: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)" }}>
-              {TIMER_PRESETS.map(m => <option key={m} value={m} className="text-black bg-white">{m} minutos</option>)}
+              {TIMER_PRESETS.map(m => (
+                <option key={m} value={m} className="text-black bg-white">{m} minutos</option>
+              ))}
             </select>
             <ChevronDown size={13} className="absolute right-2 top-1/2 -translate-y-1/2 opacity-60 pointer-events-none" />
           </div>
@@ -185,7 +217,8 @@ export function FloatingTimer() {
         {mode === "timer" && isActive && !isDone && (
           <div className="mt-3 mx-4">
             <div className="w-full h-1.5 rounded-full bg-white/20 overflow-hidden">
-              <div className="h-full rounded-full bg-green-400 transition-all duration-500" style={{ width: `${countdown.pct}%` }} />
+              <div className="h-full rounded-full bg-green-400 transition-all duration-500"
+                style={{ width: `${countdown.progress}%` }} />
             </div>
           </div>
         )}
