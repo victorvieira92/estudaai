@@ -201,7 +201,7 @@ export default function HojePage() {
         {/* KPIs de hoje */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Horas hoje",        value: `${data.todayStats.hours.toFixed(1)}h`, icon: Clock,       color: "text-blue-600"   },
+            { label: "Horas hoje",        value: fmtH(data.todayStats.hours),            icon: Clock,       color: "text-blue-600"   },
             { label: "Questões hoje",     value: data.todayStats.questions,              icon: Target,      color: "text-purple-600" },
             { label: "Revisões pendentes",value: data.reviews.length,                    icon: RefreshCw,   color: data.reviews.length       > 0 ? "text-red-600"    : "text-green-600" },
             { label: "Erros críticos",    value: data.criticalErrors.length,             icon: AlertCircle, color: data.criticalErrors.length > 0 ? "text-orange-600" : "text-green-600" },
@@ -224,7 +224,7 @@ export default function HojePage() {
               <div className="flex justify-between text-sm mb-1">
                 <span className="font-medium text-gray-700">Horas</span>
                 <span className="text-gray-500">
-                  {data.weekStats.hours.toFixed(1)}h / {hoursTarget.toFixed(1)}h
+                  {fmtH(data.weekStats.hours)} / {fmtH(hoursTarget)}
                 </span>
               </div>
               <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
