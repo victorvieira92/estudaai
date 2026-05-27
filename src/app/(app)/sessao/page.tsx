@@ -142,9 +142,26 @@ function SessaoContent() {
       d.setDate(d.getDate() - 1);
       studyDate = d.toISOString().slice(0, 10);
     } else if (dateMode === "outro" && otherDate) {
-      studyDate = otherDate; // formato YYYY-MM-DD do input[type=date]
+      studyDate = otherDate;
     }
-    // dateMode === "hoje" → não envia studyDate, API usa now()
+
+    // Resolve pdfId pelo material digitado (match por título)
+    // Isso permite atualizar lastPageStudied e progress do PDF automaticamente
+    const norm = (s: string) => s.trim().toLowerCase();
+    const allPdfs = subject?.topics.flatMap(t => t.pdfs) ?? [];
+    const matchedPdf = material.trim()
+      ? allPdfs.find(p =>
+          norm(p.title) === norm(material) ||
+          norm(p.title).includes(norm(material)) ||
+          norm(material).includes(norm(p.title))
+        )
+      : undefined;
+    const resolvedPdfId = matchedPdf?.id ?? "";
+
+    // Páginas: usa o primeiro range preenchido
+    const firstPageRange = pages.find(p => parseInt(p.end) > 0);
+    const resolvedStart  = parseInt(firstPageRange?.start ?? "0") || 0;
+    const resolvedEnd    = parseInt(firstPageRange?.end   ?? "0") || 0;
 
     try {
       const res = await fetch("/api/study-sessions", {
@@ -152,8 +169,11 @@ function SessaoContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subjectId, topicId,
+          pdfId:     resolvedPdfId,   // ← envia pdfId resolvido pelo título do material
           hours, duration,
-          startPage, endPage, totalPages: 0,
+          startPage: resolvedStart,
+          endPage:   resolvedEnd,
+          totalPages: 0,
           questions:        (parseInt(correct) || 0) + (parseInt(wrong) || 0),
           correctQuestions: parseInt(correct) || 0,
           wrongQuestions:   parseInt(wrong)   || 0,
@@ -162,7 +182,7 @@ function SessaoContent() {
           topicName: topic?.name ?? "",
           pdfTitle:  material,
           comment,
-          studyDate, // ← NOVO: data do estudo (undefined = hoje)
+          studyDate,
         }),
       });
       const data = await res.json();
