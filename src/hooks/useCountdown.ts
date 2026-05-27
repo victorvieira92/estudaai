@@ -1,107 +1,132 @@
-"use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export type TimerState = "idle" | "running" | "paused" | "done";
-
-const STORAGE_KEY = "estudaai_countdown";
+// ✅ FIX: chave prefixada com userId para isolamento multiusuário
+function getStorageKey(userId?: string) {
+  return userId ? `estudaai_countdown_${userId}` : "estudaai_countdown";
+}
 
 interface PersistedCountdown {
-  state:       TimerState;
-  targetSecs:  number;
-  remaining:   number;
-  startedAt:   number | null;
+  targetMs: number;    // timestamp ms quando o countdown acaba
+  totalSecs: number;   // duração total configurada (para a barra de progresso)
+  running: boolean;
 }
 
-function load(): PersistedCountdown {
-  if (typeof window === "undefined")
-    return { state: "idle", targetSecs: 25 * 60, remaining: 25 * 60, startedAt: null };
+function load(userId?: string): PersistedCountdown | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { state: "idle", targetSecs: 25 * 60, remaining: 25 * 60, startedAt: null };
+    const raw = localStorage.getItem(getStorageKey(userId));
+    if (!raw) return null;
     return JSON.parse(raw) as PersistedCountdown;
-  } catch {
-    return { state: "idle", targetSecs: 25 * 60, remaining: 25 * 60, startedAt: null };
-  }
+  } catch { return null; }
 }
 
-function save(data: PersistedCountdown) {
-  if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function save(data: PersistedCountdown, userId?: string) {
+  if (typeof window !== "undefined")
+    localStorage.setItem(getStorageKey(userId), JSON.stringify(data));
 }
 
-function clearStorage() {
-  if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+function clear(userId?: string) {
+  if (typeof window !== "undefined")
+    localStorage.removeItem(getStorageKey(userId));
 }
 
-function calcRemaining(p: PersistedCountdown): number {
-  if (p.state !== "running" || !p.startedAt) return p.remaining;
-  const elapsed = Math.floor((Date.now() - p.startedAt) / 1000);
-  return Math.max(0, p.remaining - elapsed);
-}
+export function useCountdown(userId?: string) {
+  const [remaining, setRemaining] = useState(0);  // segundos restantes
+  const [totalSecs, setTotalSecs] = useState(0);
+  const [running,   setRunning]   = useState(false);
+  const [finished,  setFinished]  = useState(false);
+  const intervalRef               = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stateRef                  = useRef<PersistedCountdown | null>(null);
 
-export function useCountdown() {
-  const [persisted, setPersisted] = useState<PersistedCountdown>(() => load());
-  const [remaining, setRemaining] = useState<number>(() => calcRemaining(load()));
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const { state, targetSecs } = persisted;
-
+  // Hidrata do localStorage na montagem
   useEffect(() => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    if (state === "running") {
+    const persisted = load(userId);
+    if (!persisted) return;
+    stateRef.current = persisted;
+    setTotalSecs(persisted.totalSecs);
+    if (persisted.running) {
+      const rem = Math.max(0, Math.ceil((persisted.targetMs - Date.now()) / 1000));
+      setRemaining(rem);
+      if (rem > 0) setRunning(true);
+      else setFinished(true);
+    }
+  }, [userId]);
+
+  // Tick
+  useEffect(() => {
+    if (running) {
       intervalRef.current = setInterval(() => {
-        const r = calcRemaining(persisted);
-        setRemaining(r);
-        if (r <= 0) {
-          const done: PersistedCountdown = { ...persisted, state: "done", remaining: 0, startedAt: null };
-          save(done); setPersisted(done); setRemaining(0);
-          clearInterval(intervalRef.current!);
+        if (!stateRef.current) return;
+        const rem = Math.max(0, Math.ceil((stateRef.current.targetMs - Date.now()) / 1000));
+        setRemaining(rem);
+        if (rem <= 0) {
+          setRunning(false);
+          setFinished(true);
+          clear(userId);
         }
       }, 500);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, persisted.startedAt]);
+  }, [running, userId]);
 
-  useEffect(() => {
-    const p = load(); setPersisted(p); setRemaining(calcRemaining(p));
-  }, []);
-
-  const update = (next: PersistedCountdown) => { save(next); setPersisted(next); setRemaining(calcRemaining(next)); };
-
-  const setDuration = useCallback((mins: number) => {
-    const secs = mins * 60;
-    update({ state: "idle", targetSecs: secs, remaining: secs, startedAt: null });
-  }, []);
-
-  const start = useCallback(() => {
-    update({ ...persisted, state: "running", startedAt: Date.now() });
-  }, [persisted]);
+  const start = useCallback((secs: number) => {
+    const targetMs = Date.now() + secs * 1000;
+    const state: PersistedCountdown = { targetMs, totalSecs: secs, running: true };
+    stateRef.current = state;
+    save(state, userId);
+    setTotalSecs(secs);
+    setRemaining(secs);
+    setRunning(true);
+    setFinished(false);
+  }, [userId]);
 
   const pause = useCallback(() => {
-    if (state !== "running") return;
-    update({ ...persisted, state: "paused", remaining: calcRemaining(persisted), startedAt: null });
-  }, [state, persisted]);
+    if (!stateRef.current) return;
+    // Salva o estado pausado guardando quanto falta
+    const rem = Math.max(0, Math.ceil((stateRef.current.targetMs - Date.now()) / 1000));
+    const state: PersistedCountdown = {
+      targetMs:  Date.now() + rem * 1000,
+      totalSecs: stateRef.current.totalSecs,
+      running:   false,
+    };
+    stateRef.current = state;
+    save(state, userId);
+    setRunning(false);
+  }, [userId]);
 
   const resume = useCallback(() => {
-    if (state !== "paused") return;
-    update({ ...persisted, state: "running", startedAt: Date.now() });
-  }, [state, persisted]);
+    if (!stateRef.current) return;
+    const state: PersistedCountdown = {
+      ...stateRef.current,
+      targetMs: Date.now() + remaining * 1000,
+      running:  true,
+    };
+    stateRef.current = state;
+    save(state, userId);
+    setRunning(true);
+    setFinished(false);
+  }, [remaining, userId]);
 
   const reset = useCallback(() => {
-    clearStorage();
-    const next: PersistedCountdown = { state: "idle", targetSecs, remaining: targetSecs, startedAt: null };
-    setPersisted(next); setRemaining(targetSecs);
-  }, [targetSecs]);
+    clear(userId);
+    stateRef.current = null;
+    setRemaining(0);
+    setTotalSecs(0);
+    setRunning(false);
+    setFinished(false);
+  }, [userId]);
 
-  const pct = targetSecs > 0 ? Math.round(((targetSecs - remaining) / targetSecs) * 100) : 0;
-  const hh  = String(Math.floor(remaining / 3600)).padStart(2, "0");
-  const mm  = String(Math.floor((remaining % 3600) / 60)).padStart(2, "0");
-  const ss  = String(remaining % 60).padStart(2, "0");
-
-  return {
-    state, remaining, targetSecs, pct,
-    formatted: `${hh}:${mm}:${ss}`,
-    elapsedSeconds: targetSecs - remaining,
-    start, pause, resume, reset, setDuration,
+  const fmt = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
+    return [m, s].map(v => String(v).padStart(2, "0")).join(":");
   };
+
+  const progress = totalSecs > 0 ? Math.round(((totalSecs - remaining) / totalSecs) * 100) : 0;
+
+  return { remaining, totalSecs, running, finished, formatted: fmt(remaining), progress, start, pause, resume, reset };
 }

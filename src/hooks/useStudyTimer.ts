@@ -1,71 +1,97 @@
-"use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 
-export type TimerState = "idle" | "running" | "paused";
-
-const STORAGE_KEY = "estudaai_timer";
+// ✅ FIX: chave prefixada com userId para isolamento multiusuário
+function getStorageKey(userId?: string) {
+  return userId ? `estudaai_timer_${userId}` : "estudaai_timer";
+}
 
 interface PersistedTimer {
-  state:       TimerState;
-  accumulated: number;
-  startedAt:   number | null;
+  startedAt: number;   // timestamp ms quando o timer foi iniciado
+  accumulated: number; // segundos já acumulados antes de pausar
+  running: boolean;
 }
 
-function load(): PersistedTimer {
-  if (typeof window === "undefined") return { state: "idle", accumulated: 0, startedAt: null };
+function load(userId?: string): PersistedTimer | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { state: "idle", accumulated: 0, startedAt: null };
+    const raw = localStorage.getItem(getStorageKey(userId));
+    if (!raw) return null;
     return JSON.parse(raw) as PersistedTimer;
-  } catch { return { state: "idle", accumulated: 0, startedAt: null }; }
+  } catch { return null; }
 }
 
-function save(data: PersistedTimer) {
-  if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+function save(data: PersistedTimer, userId?: string) {
+  if (typeof window !== "undefined")
+    localStorage.setItem(getStorageKey(userId), JSON.stringify(data));
 }
 
-function clear() {
-  if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+function clear(userId?: string) {
+  if (typeof window !== "undefined")
+    localStorage.removeItem(getStorageKey(userId));
 }
 
-function calcElapsed(p: PersistedTimer): number {
-  let total = p.accumulated;
-  if (p.state === "running" && p.startedAt)
-    total += Math.floor((Date.now() - p.startedAt) / 1000);
-  return total;
-}
+export function useStudyTimer(userId?: string) {
+  const [elapsed, setElapsed]   = useState(0); // segundos totais
+  const [running, setRunning]   = useState(false);
+  const intervalRef             = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stateRef                = useRef<PersistedTimer>({ startedAt: 0, accumulated: 0, running: false });
 
-export function useStudyTimer() {
-  const [persisted, setPersisted] = useState<PersistedTimer>(() => load());
-  const [elapsed, setElapsed]     = useState<number>(() => calcElapsed(load()));
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const { state } = persisted;
-
+  // Hidrata do localStorage na montagem
   useEffect(() => {
-    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
-    if (state === "running") {
-      intervalRef.current = setInterval(() => setElapsed(calcElapsed(persisted)), 500);
+    const persisted = load(userId);
+    if (!persisted) return;
+    stateRef.current = persisted;
+    if (persisted.running) {
+      const now  = Date.now();
+      const diff = Math.floor((now - persisted.startedAt) / 1000);
+      setElapsed(persisted.accumulated + diff);
+      setRunning(true);
+    } else {
+      setElapsed(persisted.accumulated);
+    }
+  }, [userId]);
+
+  // Tick
+  useEffect(() => {
+    if (running) {
+      intervalRef.current = setInterval(() => {
+        const now  = Date.now();
+        const diff = Math.floor((now - stateRef.current.startedAt) / 1000);
+        setElapsed(stateRef.current.accumulated + diff);
+      }, 1000);
+    } else {
+      if (intervalRef.current) clearInterval(intervalRef.current);
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, persisted.startedAt]);
+  }, [running]);
 
-  useEffect(() => {
-    const p = load(); setPersisted(p); setElapsed(calcElapsed(p));
-  }, []);
+  const start = useCallback(() => {
+    const now = Date.now();
+    stateRef.current = { startedAt: now, accumulated: elapsed, running: true };
+    save(stateRef.current, userId);
+    setRunning(true);
+  }, [elapsed, userId]);
 
-  const update = (next: PersistedTimer) => { save(next); setPersisted(next); setElapsed(calcElapsed(next)); };
+  const pause = useCallback(() => {
+    stateRef.current = { ...stateRef.current, accumulated: elapsed, running: false };
+    save(stateRef.current, userId);
+    setRunning(false);
+  }, [elapsed, userId]);
 
-  const start  = useCallback(() => update({ state: "running", accumulated: 0, startedAt: Date.now() }), []);
-  const pause  = useCallback(() => { if (state !== "running") return; update({ state: "paused", accumulated: calcElapsed(persisted), startedAt: null }); }, [state, persisted]);
-  const resume = useCallback(() => { if (state !== "paused") return; update({ state: "running", accumulated: persisted.accumulated, startedAt: Date.now() }); }, [state, persisted]);
-  const stop   = useCallback((): number => { const final = calcElapsed(persisted); clear(); setPersisted({ state: "idle", accumulated: 0, startedAt: null }); setElapsed(0); return final; }, [persisted]);
-  const reset  = useCallback(() => { clear(); setPersisted({ state: "idle", accumulated: 0, startedAt: null }); setElapsed(0); }, []);
+  const reset = useCallback(() => {
+    clear(userId);
+    stateRef.current = { startedAt: 0, accumulated: 0, running: false };
+    setElapsed(0);
+    setRunning(false);
+  }, [userId]);
 
-  const hh = String(Math.floor(elapsed / 3600)).padStart(2, "0");
-  const mm = String(Math.floor((elapsed % 3600) / 60)).padStart(2, "0");
-  const ss = String(elapsed % 60).padStart(2, "0");
+  // Formata HH:MM:SS
+  const fmt = (secs: number) => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return [h, m, s].map(v => String(v).padStart(2, "0")).join(":");
+  };
 
-  return { state, elapsed, formatted: `${hh}:${mm}:${ss}`, hoursDecimal: elapsed / 3600, start, pause, resume, stop, reset };
+  return { elapsed, running, formatted: fmt(elapsed), start, pause, reset };
 }

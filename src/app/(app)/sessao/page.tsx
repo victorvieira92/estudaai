@@ -135,6 +135,17 @@ function SessaoContent() {
     const startPage = parseInt(pages[0]?.start) || 0;
     const endPage   = parseInt(pages[0]?.end)   || 0;
 
+    // Calcula a data correta baseada no dateMode
+    let studyDate: string | undefined;
+    if (dateMode === "ontem") {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      studyDate = d.toISOString().slice(0, 10);
+    } else if (dateMode === "outro" && otherDate) {
+      studyDate = otherDate; // formato YYYY-MM-DD do input[type=date]
+    }
+    // dateMode === "hoje" → não envia studyDate, API usa now()
+
     try {
       const res = await fetch("/api/study-sessions", {
         method:  "POST",
@@ -151,6 +162,7 @@ function SessaoContent() {
           topicName: topic?.name ?? "",
           pdfTitle:  material,
           comment,
+          studyDate, // ← NOVO: data do estudo (undefined = hoje)
         }),
       });
       const data = await res.json();

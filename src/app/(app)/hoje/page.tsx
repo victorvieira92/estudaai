@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
   Clock, RefreshCw, AlertCircle,
@@ -58,9 +59,10 @@ interface Data {
   weekDay:        number;
 }
 
-const CYCLE_KEY    = "estudaai_cycle_day";
-const PENDING_KEY  = "estudaai_pending";
-const DONE_KEY     = "estudaai_done_ids";
+// ✅ FIX: chaves prefixadas por userId para isolamento multiusuário
+function getCycleKey(uid: string)   { return `estudaai_cycle_day_${uid}`; }
+function getPendingKey(uid: string) { return `estudaai_pending_${uid}`; }
+function getDoneKey(uid: string)    { return `estudaai_done_ids_${uid}`; }
 
 const BLOCK_TYPE_LABEL: Record<string, string> = {
   leitura:       "Leitura PDF",
@@ -103,6 +105,8 @@ function fmtTime(iso: string): string {
 }
 
 export default function HojePage() {
+  const { data: authSession } = useSession();
+  const uid = authSession?.user?.id ?? "guest";
   const [data,            setData]            = useState<Data | null>(null);
   const [loading,         setLoading]         = useState(true);
   const [completedBlocks, setCompletedBlocks] = useState<number[]>([]);
@@ -129,10 +133,10 @@ export default function HojePage() {
       })) : [];
       setCicloBlocks(mapped);
       const days  = getCycleDays(mapped);
-      const saved = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
+      const saved = parseInt(localStorage.getItem(getCycleKey(uid)) ?? "0", 10);
       setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
-      try { setPendingBlocks(JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]")); } catch { setPendingBlocks([]); }
-      try { setDoneIds(new Set(JSON.parse(localStorage.getItem(DONE_KEY) ?? "[]"))); } catch { setDoneIds(new Set()); }
+      try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
+      try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
     }).catch(console.error);
   }, []);
 
@@ -165,7 +169,7 @@ export default function HojePage() {
     setDoneIds(prev => {
       const next = new Set(prev);
       next.has(id) ? next.delete(id) : next.add(id);
-      localStorage.setItem(DONE_KEY, JSON.stringify([...next]));
+      localStorage.setItem(getDoneKey(uid), JSON.stringify([...next]));
       return next;
     });
   };
@@ -174,9 +178,9 @@ export default function HojePage() {
     setCompleting(true);
     const undone  = allCiclo.filter(b => !doneIds.has(b.id));
     const nextIdx = (currentDayIdx + 1) % cycleDays.length;
-    localStorage.setItem(CYCLE_KEY,   String(nextIdx));
-    localStorage.setItem(PENDING_KEY, JSON.stringify(undone));
-    localStorage.setItem(DONE_KEY,    "[]");
+    localStorage.setItem(getCycleKey(uid),   String(nextIdx));
+    localStorage.setItem(getPendingKey(uid), JSON.stringify(undone));
+    localStorage.setItem(getDoneKey(uid),    "[]");
     setCurrentDayIdx(nextIdx);
     setPendingBlocks(undone);
     setDoneIds(new Set());

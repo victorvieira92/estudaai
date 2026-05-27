@@ -40,8 +40,22 @@ export async function POST(req: Request) {
 
     await prisma.$transaction(async (tx) => {
       // 1. Sessão de estudo
+      // studyDate: data enviada pelo cliente no formato YYYY-MM-DD (para registros retroativos)
+      // Converte para DateTime em UTC-3 (Brasília) às 12:00 para evitar problemas de fuso
+      let createdAt: Date | undefined;
+      if (body.studyDate && typeof body.studyDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.studyDate)) {
+        // Interpreta a data como horário de Brasília (UTC-3), meio-dia
+        // Isso garante que toBRDate() sempre vai retornar a data correta
+        const [y, m, d] = body.studyDate.split("-").map(Number);
+        createdAt = new Date(Date.UTC(y, m - 1, d, 15, 0, 0)); // 15:00 UTC = 12:00 BRT
+      }
+
       await tx.studySession.create({
-        data: { userId: uid, subjectId, duration, studyHours: hours, questions, correct, wrong, notes },
+        data: {
+          userId: uid, subjectId, duration, studyHours: hours,
+          questions, correct, wrong, notes,
+          ...(createdAt ? { createdAt } : {}),
+        },
       });
 
       // 2. PDF (se selecionado — verifica que pertence ao usuário)
