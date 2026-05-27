@@ -236,32 +236,54 @@ export default function DashboardPage() {
             {/* Metas semanal — calculadas da semana atual */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Metas de Estudo Semanal</h2>
-              {stats ? (
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Horas de Estudo</span>
-                      <span>{fmtH(weekTotalHours)}</span>
+              {stats ? (() => {
+                // Meta semanal = soma das horas do ciclo (weeksData offset 0)
+                // Se não houver ciclo configurado, usa 20h como meta padrão
+                const horasMeta = stats.weeksData?.[0]?.days
+                  ? Math.max(20, stats.weeksData[0].days.reduce((a: number, d: any) => a + (d.hours ?? 0), 0) * 2)
+                  : 20;
+                const pctHoras = Math.min(100, Math.round((weekTotalHours / horasMeta) * 100));
+                const META_Q   = 300;
+                const pctQ     = Math.min(100, Math.round((weekTotalQ / META_Q) * 100));
+                return (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                        <span className="font-medium">Horas de Estudo</span>
+                        <span className="font-semibold text-gray-700">{fmtH(weekTotalHours)} / {fmtH(horasMeta)}</span>
+                      </div>
+                      <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all flex items-center justify-end pr-2"
+                          style={{ width: `${Math.max(pctHoras, 8)}%`, backgroundColor: BG }}>
+                          {pctHoras >= 15 && (
+                            <span className="text-white text-[10px] font-bold">{pctHoras}%</span>
+                          )}
+                        </div>
+                        {pctHoras < 15 && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pctHoras}%</span>
+                        )}
+                      </div>
                     </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{
-                        width: `${Math.min(100, (weekTotalHours / 20) * 100)}%`,
-                        backgroundColor: BG,
-                      }} />
+                    <div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                        <span className="font-medium">Questões</span>
+                        <span className="font-semibold text-gray-700">{weekTotalQ} / {META_Q}</span>
+                      </div>
+                      <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-purple-500 transition-all flex items-center justify-end pr-2"
+                          style={{ width: `${Math.max(pctQ, 8)}%` }}>
+                          {pctQ >= 15 && (
+                            <span className="text-white text-[10px] font-bold">{pctQ}%</span>
+                          )}
+                        </div>
+                        {pctQ < 15 && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pctQ}%</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Questões</span>
-                      <span>{weekTotalQ}</span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-purple-500 transition-all" style={{
-                        width: `${Math.min(100, (weekTotalQ / 300) * 100)}%`,
-                      }} />
-                    </div>
-                  </div>
-                </div>
+                );
+              })()
               ) : (
                 <div className="space-y-3">
                   {[1,2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
@@ -377,16 +399,19 @@ export default function DashboardPage() {
                 )}
               </div>
               {stats?.todayBySubject && stats.todayBySubject.length > 0 ? (
-                <ResponsiveContainer width="100%" height={140}>
+                <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
                     <Pie data={stats.todayBySubject} dataKey="hours" nameKey="name"
-                      cx="50%" cy="50%" innerRadius={35} outerRadius={55} paddingAngle={3}>
+                      cx="50%" cy="45%" innerRadius={50} outerRadius={75} paddingAngle={3}
+                      label={({ name, percent }) => percent > 0.08 ? `${Math.round(percent*100)}%` : ""}
+                      labelLine={false}>
                       {stats.todayBySubject.map((_, i) => (
                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: number) => [fmtH(v), "Horas"]} />
-                    <Legend iconSize={8} />
+                    <Legend iconSize={10} iconType="circle"
+                      formatter={(value: string) => <span style={{fontSize:11}}>{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
