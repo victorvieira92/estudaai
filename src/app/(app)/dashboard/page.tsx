@@ -51,6 +51,52 @@ function fmtDate(ds: string) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
+
+// Componente extraído para evitar IIFE no JSX (causa erro de compilação no Next.js)
+function MetasSemanal({ weekTotalHours, weekTotalQ, weeksData }: {
+  weekTotalHours: number;
+  weekTotalQ:     number;
+  weeksData:      WeekData[];
+}) {
+  const META_Q    = 300;
+  const horasMeta = weeksData?.[0]?.days
+    ? Math.max(20, weeksData[0].days.reduce((a, d) => a + (d.hours ?? 0), 0) * 2)
+    : 20;
+  const pctHoras = Math.min(100, Math.round((weekTotalHours / horasMeta) * 100));
+  const pctQ     = Math.min(100, Math.round((weekTotalQ / META_Q) * 100));
+
+  const Bar = ({ pct, color }: { pct: number; color: string }) => (
+    <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-full rounded-full transition-all flex items-center justify-end pr-2"
+        style={{ width: `${Math.max(pct, 8)}%`, backgroundColor: color }}>
+        {pct >= 15 && <span className="text-white text-[10px] font-bold">{pct}%</span>}
+      </div>
+      {pct < 15 && (
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pct}%</span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+          <span className="font-medium">Horas de Estudo</span>
+          <span className="font-semibold text-gray-700">{fmtH(weekTotalHours)} / {fmtH(horasMeta)}</span>
+        </div>
+        <Bar pct={pctHoras} color={BG} />
+      </div>
+      <div>
+        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+          <span className="font-medium">Questões</span>
+          <span className="font-semibold text-gray-700">{weekTotalQ} / {META_Q}</span>
+        </div>
+        <Bar pct={pctQ} color="#8B5CF6" />
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [stats,      setStats]      = useState<Stats | null>(null);
@@ -236,58 +282,12 @@ export default function DashboardPage() {
             {/* Metas semanal — calculadas da semana atual */}
             <div className="bg-white rounded-2xl border border-gray-200 p-5">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Metas de Estudo Semanal</h2>
-              {stats ? (() => {
-                // Meta semanal = soma das horas do ciclo (weeksData offset 0)
-                // Se não houver ciclo configurado, usa 20h como meta padrão
-                const horasMeta = stats.weeksData?.[0]?.days
-                  ? Math.max(20, stats.weeksData[0].days.reduce((a: number, d: any) => a + (d.hours ?? 0), 0) * 2)
-                  : 20;
-                const pctHoras = Math.min(100, Math.round((weekTotalHours / horasMeta) * 100));
-                const META_Q   = 300;
-                const pctQ     = Math.min(100, Math.round((weekTotalQ / META_Q) * 100));
-                return (
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                        <span className="font-medium">Horas de Estudo</span>
-                        <span className="font-semibold text-gray-700">{fmtH(weekTotalHours)} / {fmtH(horasMeta)}</span>
-                      </div>
-                      <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all flex items-center justify-end pr-2"
-                          style={{ width: `${Math.max(pctHoras, 8)}%`, backgroundColor: BG }}>
-                          {pctHoras >= 15 && (
-                            <span className="text-white text-[10px] font-bold">{pctHoras}%</span>
-                          )}
-                        </div>
-                        {pctHoras < 15 && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pctHoras}%</span>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-                        <span className="font-medium">Questões</span>
-                        <span className="font-semibold text-gray-700">{weekTotalQ} / {META_Q}</span>
-                      </div>
-                      <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full bg-purple-500 transition-all flex items-center justify-end pr-2"
-                          style={{ width: `${Math.max(pctQ, 8)}%` }}>
-                          {pctQ >= 15 && (
-                            <span className="text-white text-[10px] font-bold">{pctQ}%</span>
-                          )}
-                        </div>
-                        {pctQ < 15 && (
-                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pctQ}%</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()
-              ) : (
+              {!stats ? (
                 <div className="space-y-3">
                   {[1,2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
                 </div>
+              ) : (
+                <MetasSemanal weekTotalHours={weekTotalHours} weekTotalQ={weekTotalQ} weeksData={stats.weeksData} />
               )}
             </div>
 
