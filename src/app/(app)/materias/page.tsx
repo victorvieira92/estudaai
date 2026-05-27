@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useState, useEffect, useCallback } from "react";
 import { Plus, ChevronDown, ChevronUp, BookOpen, Trash2, Pencil, Check, X, RotateCcw } from "lucide-react";
 
@@ -363,8 +364,20 @@ export default function MateriasPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="text-white px-8 py-8" style={{ backgroundColor: "#1B4040" }}>
-        <h1 className="text-3xl font-bold">Matérias</h1>
-        <p className="text-gray-400 text-sm mt-1">Cadastre disciplinas, tópicos e PDFs. O histórico é sincronizado com a Sessão de Estudos.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Matérias</h1>
+            <p className="text-gray-400 text-sm mt-1">Cadastre disciplinas, tópicos e PDFs. O histórico é sincronizado com a Sessão de Estudos.</p>
+          </div>
+          <Link href="/importar"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "#fff" }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            Importar planilha
+          </Link>
+        </div>
       </div>
       <div className="max-w-5xl mx-auto px-6 py-8 space-y-6">
 

@@ -17,7 +17,7 @@ export async function GET() {
   const todayUTC = new Date();
   todayUTC.setHours(0, 0, 0, 0);
 
-  const [subjects, errorNotes, reviews, allSessions] = await Promise.all([
+  const [subjects, errorNotes, reviews, allSessions, studyBlocks] = await Promise.all([
     prisma.subject.findMany({
       where:   { userId: uid },
       include: { topics: { include: { pdfs: true } } },
@@ -33,6 +33,7 @@ export async function GET() {
       where:   { userId: uid },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.studyBlock.findMany({ where: { userId: uid } }),
   ]);
 
   const allPdfs        = subjects.flatMap(s => s.topics.flatMap(t => t.pdfs));
@@ -172,6 +173,12 @@ export async function GET() {
     return { weekOffset: i, startDate: days[0].date, endDate: days[6].date, days };
   });
 
+  // Meta semanal de horas = soma das horas de todos os StudyBlocks do ciclo (1 ciclo = 1 semana)
+  // Sem arredondamento — exibe exatamente como configurado (ex: 19.5h = 19h30min)
+  const weeklyGoalHours = parseFloat(
+    (studyBlocks as any[]).reduce((a: number, b: any) => a + (b.hours ?? 0), 0).toFixed(2)
+  );
+
   return NextResponse.json({
     totalHours:     parseFloat(totalHours.toFixed(1)),
     totalQuestions, totalCorrect, totalWrong,
@@ -197,5 +204,6 @@ export async function GET() {
       })),
     weeklyHours,
     weeksData,
+    weeklyGoalHours,
   });
 }

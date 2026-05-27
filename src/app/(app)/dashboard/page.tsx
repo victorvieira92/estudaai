@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
@@ -38,6 +38,7 @@ interface Stats {
   subjectStats:    { name: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null }[];
   weeklyHours:     { day: string; hours: number }[];
   weeksData:       WeekData[];
+  weeklyGoalHours: number;
 }
 
 const PIE_COLORS = [BG,"#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6"];
@@ -52,18 +53,39 @@ function fmtDate(ds: string) {
 }
 
 
-// Componente extraído para evitar IIFE no JSX (causa erro de compilação no Next.js)
-function MetasSemanal({ weekTotalHours, weekTotalQ, weeksData }: {
-  weekTotalHours: number;
-  weekTotalQ:     number;
-  weeksData:      WeekData[];
+// Componente de Metas Semanais com meta de questões editável
+function MetasSemanal({ weekTotalHours, weekTotalQ, weeklyGoalHours, userId }: {
+  weekTotalHours:  number;
+  weekTotalQ:      number;
+  weeklyGoalHours: number;
+  userId?:         string;
 }) {
-  const META_Q    = 300;
-  const horasMeta = weeksData?.[0]?.days
-    ? Math.max(20, weeksData[0].days.reduce((a, d) => a + (d.hours ?? 0), 0) * 2)
-    : 20;
-  const pctHoras = Math.min(100, Math.round((weekTotalHours / horasMeta) * 100));
-  const pctQ     = Math.min(100, Math.round((weekTotalQ / META_Q) * 100));
+  const storageKey = userId ? `estudaai_meta_q_${userId}` : "estudaai_meta_q";
+  const [metaQ,      setMetaQ]      = React.useState(150);
+  const [editingQ,   setEditingQ]   = React.useState(false);
+  const [inputQ,     setInputQ]     = React.useState("");
+
+  // Carrega meta de questões do localStorage
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) setMetaQ(parseInt(saved) || 150);
+    } catch {}
+  }, [storageKey]);
+
+  const saveMetaQ = () => {
+    const v = parseInt(inputQ);
+    if (v > 0) {
+      setMetaQ(v);
+      try { localStorage.setItem(storageKey, String(v)); } catch {}
+    }
+    setEditingQ(false);
+  };
+
+  // weeklyGoalHours vem dos StudyBlocks — exatamente como configurado, sem arredondar
+  const horasMeta = weeklyGoalHours;
+  const pctHoras  = horasMeta > 0 ? Math.min(100, Math.round((weekTotalHours / horasMeta) * 100)) : 0;
+  const pctQ     = Math.min(100, Math.round((weekTotalQ / metaQ) * 100));
 
   const Bar = ({ pct, color }: { pct: number; color: string }) => (
     <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
@@ -82,14 +104,45 @@ function MetasSemanal({ weekTotalHours, weekTotalQ, weeksData }: {
       <div>
         <div className="flex justify-between text-xs text-gray-500 mb-1.5">
           <span className="font-medium">Horas de Estudo</span>
-          <span className="font-semibold text-gray-700">{fmtH(weekTotalHours)} / {fmtH(horasMeta)}</span>
+          <span className="font-semibold text-gray-700">
+            {fmtH(weekTotalHours)}{horasMeta > 0 ? ` / ${fmtH(horasMeta)}` : ""}
+          </span>
         </div>
         <Bar pct={pctHoras} color={BG} />
       </div>
       <div>
         <div className="flex justify-between text-xs text-gray-500 mb-1.5">
           <span className="font-medium">Questões</span>
-          <span className="font-semibold text-gray-700">{weekTotalQ} / {META_Q}</span>
+          <div className="flex items-center gap-1.5">
+            {editingQ ? (
+              <div className="flex items-center gap-1">
+                <input
+                  autoFocus
+                  type="number" min="1" value={inputQ}
+                  onChange={e => setInputQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveMetaQ(); if (e.key === "Escape") setEditingQ(false); }}
+                  className="w-16 text-center text-xs border border-gray-300 rounded-lg px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-gray-900"
+                  placeholder={String(metaQ)}
+                />
+                <button onClick={saveMetaQ}
+                  className="text-[10px] text-white px-1.5 py-0.5 rounded bg-gray-900 font-bold">✓</button>
+                <button onClick={() => setEditingQ(false)}
+                  className="text-[10px] text-gray-400 hover:text-gray-600">✕</button>
+              </div>
+            ) : (
+              <>
+                <span className="font-semibold text-gray-700">{weekTotalQ} / {metaQ}</span>
+                <button onClick={() => { setInputQ(String(metaQ)); setEditingQ(true); }}
+                  title="Editar meta de questões"
+                  className="text-gray-300 hover:text-gray-500 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
         </div>
         <Bar pct={pctQ} color="#8B5CF6" />
       </div>
@@ -287,7 +340,7 @@ export default function DashboardPage() {
                   {[1,2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
                 </div>
               ) : (
-                <MetasSemanal weekTotalHours={weekTotalHours} weekTotalQ={weekTotalQ} weeksData={stats.weeksData} />
+                <MetasSemanal weekTotalHours={weekTotalHours} weekTotalQ={weekTotalQ} weeklyGoalHours={stats.weeklyGoalHours ?? 0} userId={session?.user?.id ?? undefined} />
               )}
             </div>
 
@@ -399,19 +452,19 @@ export default function DashboardPage() {
                 )}
               </div>
               {stats?.todayBySubject && stats.todayBySubject.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
+                <ResponsiveContainer width="100%" height={160}>
                   <PieChart>
                     <Pie data={stats.todayBySubject} dataKey="hours" nameKey="name"
-                      cx="50%" cy="45%" innerRadius={50} outerRadius={75} paddingAngle={3}
-                      label={({ name, percent }) => percent > 0.08 ? `${Math.round(percent*100)}%` : ""}
+                      cx="50%" cy="50%" innerRadius={38} outerRadius={58} paddingAngle={3}
+                      label={({ percent }) => percent > 0.08 ? `${Math.round(percent*100)}%` : ""}
                       labelLine={false}>
                       {stats.todayBySubject.map((_, i) => (
                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
                     <Tooltip formatter={(v: number) => [fmtH(v), "Horas"]} />
-                    <Legend iconSize={10} iconType="circle"
-                      formatter={(value: string) => <span style={{fontSize:11}}>{value}</span>} />
+                    <Legend iconSize={8} iconType="circle"
+                      formatter={(value: string) => <span style={{fontSize:10}}>{value}</span>} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
