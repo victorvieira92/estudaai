@@ -57,10 +57,24 @@ function PdfCard({
   const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
   const acc = accuracy(pdf.correctQuestions, pdf.questions);
 
-  // Filtra sessões do histórico que pertencem a este PDF (mesmo subjectId + pdfTitle bate)
-  const pdfSessions = allSessions.filter(
-    s => s.subjectId === subjectId && s.pdfTitle.trim() === pdf.title.trim()
-  );
+  // Filtra sessões do histórico que pertencem a este PDF
+  // Match robusto: subjectId bate + pdfTitle ou topicName contém o título do PDF (ou vice-versa)
+  const normalize = (str: string) => str.trim().toLowerCase();
+  const pdfNorm   = normalize(pdf.title);
+
+  const pdfSessions = allSessions.filter(s => {
+    if (s.subjectId !== subjectId) return false;
+    const titleNorm = normalize(s.pdfTitle);
+    const topicNorm = normalize(s.topicName);
+    if (!titleNorm && !topicNorm) return false;
+    // Match exato
+    if (titleNorm === pdfNorm) return true;
+    if (topicNorm === pdfNorm) return true;
+    // Match por inclusão (um contém o outro)
+    if (titleNorm && (titleNorm.includes(pdfNorm) || pdfNorm.includes(titleNorm))) return true;
+    if (topicNorm && (topicNorm.includes(pdfNorm) || pdfNorm.includes(topicNorm))) return true;
+    return false;
+  });
 
   // KPIs calculados direto das sessões (fonte única de verdade = StudySession)
   const totalHours     = pdfSessions.reduce((a, s) => a + s.hours, 0);
@@ -381,10 +395,11 @@ export default function MateriasPage() {
         {/* Lista de matérias */}
         <div className="space-y-4">
           {subjects.map(s => {
-            // KPIs da matéria calculados das sessões (sem PDF = sessões onde pdfTitle está vazio)
+            // KPIs da matéria calculados das sessões
+            // "sem PDF" = pdfTitle E topicName ambos vazios
             const subjectSessions = allSessions.filter(ss => ss.subjectId === s.id);
-            const sessionsComPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() !== "");
-            const sessionsSemPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() === "");
+            const sessionsComPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() !== "" || ss.topicName.trim() !== "");
+            const sessionsSemPdf  = subjectSessions.filter(ss => ss.pdfTitle.trim() === "" && ss.topicName.trim() === "");
 
             const horasComPdf  = sessionsComPdf.reduce((a, ss) => a + ss.hours, 0);
             const horasSemPdf  = sessionsSemPdf.reduce((a, ss) => a + ss.hours, 0);
