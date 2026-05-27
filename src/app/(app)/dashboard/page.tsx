@@ -452,19 +452,30 @@ export default function DashboardPage() {
                 )}
               </div>
               {stats?.todayBySubject && stats.todayBySubject.length > 0 ? (
-                <ResponsiveContainer width="100%" height={160}>
-                  <PieChart>
-                    <Pie data={stats.todayBySubject} dataKey="hours" nameKey="name"
-                      cx="50%" cy="50%" innerRadius={38} outerRadius={58} paddingAngle={3}
-                      label={({ percent }) => percent > 0.08 ? `${Math.round(percent*100)}%` : ""}
-                      labelLine={false}>
-                      {stats.todayBySubject.map((_, i) => (
+                <ResponsiveContainer width="100%" height={170}>
+                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                    <Pie
+                      data={stats.todayBySubject}
+                      dataKey="hours"
+                      nameKey="name"
+                      cx="50%"
+                      cy="42%"
+                      innerRadius={42}
+                      outerRadius={62}
+                      paddingAngle={2}
+                    >
+                      {stats.todayBySubject.map((entry, i) => (
                         <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => [fmtH(v), "Horas"]} />
-                    <Legend iconSize={8} iconType="circle"
-                      formatter={(value: string) => <span style={{fontSize:10}}>{value}</span>} />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [fmtH(v), name]}
+                    />
+                    <Legend
+                      iconSize={8}
+                      iconType="circle"
+                      wrapperStyle={{ fontSize: 10, paddingTop: 4 }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
