@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -97,30 +97,30 @@ function MapaDificuldades({ sessions }: { sessions: HistoricoSession[] }) {
   const [filterSubject, setFilterSubject] = useState("Todas");
   const [sortBy, setSortBy] = useState<"accuracy" | "questions" | "hours">("accuracy");
 
-  // Agrupa por tópico
-  const topicMap = new Map<string, TopicStat>();
-  for (const s of sessions) {
-    if (!s.topicName?.trim()) continue;
-    const key = `${s.subjectName}|||${s.topicName}`;
-    if (!topicMap.has(key)) {
-      topicMap.set(key, { topicName: s.topicName, subjectName: s.subjectName, questions: 0, correct: 0, wrong: 0, hours: 0, accuracy: null, level: "sem_dados" });
+  // Agrupa por tópico usando useMemo para evitar recálculo a cada render
+  const topics: TopicStat[] = useMemo(() => {
+    const topicMap = new Map<string, TopicStat>();
+    for (const s of sessions) {
+      if (!s.topicName?.trim()) continue;
+      const key = `${s.subjectName}|||${s.topicName}`;
+      if (!topicMap.has(key)) {
+        topicMap.set(key, { topicName: s.topicName, subjectName: s.subjectName, questions: 0, correct: 0, wrong: 0, hours: 0, accuracy: null, level: "sem_dados" });
+      }
+      const t = topicMap.get(key)!;
+      t.questions += s.questions;
+      t.correct   += s.correct;
+      t.wrong     += s.wrong;
+      t.hours     += s.hours;
     }
-    const t = topicMap.get(key)!;
-    t.questions += s.questions;
-    t.correct   += s.correct;
-    t.wrong     += s.wrong;
-    t.hours     += s.hours;
-  }
-
-  // Calcula accuracy e level
-  const topics: TopicStat[] = Array.from(topicMap.values()).map(t => {
-    const acc = t.questions > 0 ? Math.round((t.correct / t.questions) * 100) : null;
-    const level: TopicStat["level"] = acc === null ? "sem_dados"
-      : acc < 60 ? "critica"
-      : acc < 75 ? "atencao"
-      : "ok";
-    return { ...t, accuracy: acc, level };
-  });
+    return Array.from(topicMap.values()).map(t => {
+      const acc = t.questions > 0 ? Math.round((t.correct / t.questions) * 100) : null;
+      const level: TopicStat["level"] = acc === null ? "sem_dados"
+        : acc < 60 ? "critica"
+        : acc < 75 ? "atencao"
+        : "ok";
+      return { ...t, accuracy: acc, level };
+    });
+  }, [sessions]);
 
   const subjects = ["Todas", ...Array.from(new Set(topics.map(t => t.subjectName))).sort()];
   const filtered = topics
