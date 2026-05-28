@@ -13,7 +13,6 @@ import {
 const nav = [
   { href: "/dashboard",        label: "Dashboard",         icon: LayoutDashboard },
   { href: "/historico",        label: "Histórico",         icon: History },
-  { href: "/hoje",             label: "Hoje",              icon: Sun },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
   { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays },
