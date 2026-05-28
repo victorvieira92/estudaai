@@ -97,22 +97,21 @@ function MapaDificuldades({ sessions }: { sessions: HistoricoSession[] }) {
   const [filterSubject, setFilterSubject] = useState("Todas");
   const [sortBy, setSortBy] = useState<"accuracy" | "questions" | "hours">("accuracy");
 
-  // Agrupa por tópico usando useMemo para evitar recálculo a cada render
+  // Agrupa por tópico — usa objeto em vez de Map para compatibilidade com ES5
   const topics: TopicStat[] = useMemo(() => {
-    const topicMap = new Map<string, TopicStat>();
+    const topicObj: Record<string, TopicStat> = {};
     for (const s of sessions) {
       if (!s.topicName?.trim()) continue;
       const key = `${s.subjectName}|||${s.topicName}`;
-      if (!topicMap.has(key)) {
-        topicMap.set(key, { topicName: s.topicName, subjectName: s.subjectName, questions: 0, correct: 0, wrong: 0, hours: 0, accuracy: null, level: "sem_dados" });
+      if (!topicObj[key]) {
+        topicObj[key] = { topicName: s.topicName, subjectName: s.subjectName, questions: 0, correct: 0, wrong: 0, hours: 0, accuracy: null, level: "sem_dados" };
       }
-      const t = topicMap.get(key)!;
-      t.questions += s.questions;
-      t.correct   += s.correct;
-      t.wrong     += s.wrong;
-      t.hours     += s.hours;
+      topicObj[key].questions += s.questions;
+      topicObj[key].correct   += s.correct;
+      topicObj[key].wrong     += s.wrong;
+      topicObj[key].hours     += s.hours;
     }
-    return Array.from(topicMap.values()).map(t => {
+    return Object.values(topicObj).map(t => {
       const acc = t.questions > 0 ? Math.round((t.correct / t.questions) * 100) : null;
       const level: TopicStat["level"] = acc === null ? "sem_dados"
         : acc < 60 ? "critica"
