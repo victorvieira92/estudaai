@@ -252,19 +252,28 @@ export default function DashboardPage() {
             )}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {stats?.consistencyDots.map((dot, i) => (
-              <div key={i} title={dot.date}
-                className={`w-6 h-6 rounded-md flex items-center justify-center ${dot.studied ? "bg-green-500" : "bg-gray-100"}`}>
-                {dot.studied && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-              </div>
-            ))}
+            {stats?.consistencyDots.map((dot, i) => {
+              const isFuture = dot.date > new Date().toISOString().slice(0,10);
+              return (
+                <div key={i} title={dot.date}
+                  className={`w-6 h-6 rounded-md flex items-center justify-center ${
+                    dot.studied    ? "bg-green-500"
+                    : isFuture     ? "bg-gray-100"
+                    : "bg-red-400"
+                  }`}>
+                  {dot.studied && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                  {!dot.studied && !isFuture && <span className="text-white font-bold text-[10px]">✕</span>}
+                </div>
+              );
+            })}
             {!stats && Array.from({ length: 7 }).map((_, i) => (
               <div key={i} className="w-6 h-6 rounded-md bg-gray-100 animate-pulse" />
             ))}
           </div>
           <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Estudou</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block" /> Não estudou</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Não estudou</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block" /> Futuro</span>
           </div>
         </div>
 

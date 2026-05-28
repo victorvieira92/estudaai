@@ -4,8 +4,9 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function toBRDate(date: Date): string {
-  const br = new Date(date.getTime() - 3 * 60 * 60 * 1000);
-  return br.toISOString().slice(0, 10);
+  // Usa Intl.DateTimeFormat para obter a data real no fuso de Brasília (America/Sao_Paulo)
+  // Isso lida corretamente com horário de verão e evita offset fixo de -3h
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date);
 }
 function todayBR(): string { return toBRDate(new Date()); }
 
@@ -81,12 +82,17 @@ export async function GET() {
 
   // ── Horas por dia (últimos 7 dias) ────────────────────────────────────────
   const DAYS_BR = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+  const DAYS_WEEK_SHORT = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
   const weekMap: Record<string, { label: string; hours: number; questions: number; correct: number; wrong: number }> = {};
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
+  // Começa na segunda-feira usando BRT
+  const todayBRForMap = todayBR();
+  const todayForMap   = new Date(todayBRForMap + "T12:00:00");
+  const daysSinceMonForMap = (todayForMap.getDay() + 6) % 7;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(todayForMap);
+    d.setDate(todayForMap.getDate() - daysSinceMonForMap + i);
     const ds = toBRDate(d);
-    weekMap[ds] = { label: DAYS_BR[d.getDay()], hours: 0, questions: 0, correct: 0, wrong: 0 };
+    weekMap[ds] = { label: DAYS_WEEK_SHORT[i], hours: 0, questions: 0, correct: 0, wrong: 0 };
   }
   for (const s of allSessions) {
     const ds = toBRDate(new Date(s.createdAt));
@@ -146,19 +152,24 @@ export async function GET() {
 
   // ── Dados semanais navegáveis (últimas 8 semanas) ─────────────────────────
   function getWeekData(weekOffset: number) {
-    const now = new Date();
-    const dow = now.getDay();
-    const sunday = new Date(now);
-    sunday.setDate(now.getDate() - dow - weekOffset * 7);
-    sunday.setHours(0, 0, 0, 0);
+    // Usa a data atual em BRT para calcular o início da semana (segunda-feira)
+    const todayBRStr = todayBR(); // YYYY-MM-DD em BRT
+    const todayBRDate = new Date(todayBRStr + "T12:00:00"); // meio-dia para evitar DST
+    // getDay(): 0=Dom,1=Seg,...,6=Sab → dias desde segunda = (getDay()+6)%7
+    const daysSinceMonday = (todayBRDate.getDay() + 6) % 7;
+    const monday = new Date(todayBRDate);
+    monday.setDate(todayBRDate.getDate() - daysSinceMonday - weekOffset * 7);
+
+    // Seg, Ter, Qua, Qui, Sex, Sáb, Dom (começa na segunda)
+    const DAYS_WEEK = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
 
     return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(sunday);
-      d.setDate(sunday.getDate() + i);
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
       const ds = toBRDate(d);
       const daySessions = allSessions.filter(s => toBRDate(new Date(s.createdAt)) === ds);
       return {
-        day:       DAYS_BR[d.getDay()],
+        day:       DAYS_WEEK[i],
         date:      ds,
         hours:     parseFloat(daySessions.reduce((a, s) => a + s.studyHours, 0).toFixed(1)),
         questions: daySessions.reduce((a, s) => a + s.questions, 0),
