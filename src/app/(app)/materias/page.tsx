@@ -41,13 +41,12 @@ function fmtHours(h: number) { return `${h.toFixed(1)}h`; }
 
 // ── PdfCard ──────────────────────────────────────────────────────────────────
 function PdfCard({
-  pdf, subjectId, topicName, onReload, allSessions,
+  pdf, subjectId, onReload, allSessions,
 }: {
   pdf: Pdf;
   subjectId: string;
-  topicName: string;
   onReload: () => void;
-  allSessions: HistoricoSession[];
+  allSessions: HistoricoSession[]; // já carregadas pela página pai
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState(pdf.title);
@@ -59,33 +58,23 @@ function PdfCard({
   const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
   const acc = accuracy(pdf.correctQuestions, pdf.questions);
 
-  // Filtra sessões usando chave composta: subjectId + topicName + pdfTitle
-  // Isso evita que "Aula 01" de um tópico bata com "Aula 01" de outro tópico
+  // Filtra sessões do histórico que pertencem a este PDF
+  // Match robusto: subjectId bate + pdfTitle ou topicName contém o título do PDF (ou vice-versa)
   const normalize = (str: string) => str.trim().toLowerCase();
   const pdfNorm   = normalize(pdf.title);
-  const topicNorm = normalize(topicName);
 
   const pdfSessions = allSessions.filter(s => {
     if (s.subjectId !== subjectId) return false;
-
-    const sTopic = normalize(s.topicName);
-    const sTitle = normalize(s.pdfTitle);
-
-    // Ambos precisam bater: tópico da sessão com tópico do PDF
-    // E título da sessão com título do PDF
-    const topicMatch = !sTopic || !topicNorm
-      ? true  // se um dos lados está vazio, não filtra por tópico
-      : sTopic === topicNorm ||
-        sTopic.includes(topicNorm) ||
-        topicNorm.includes(sTopic);
-
-    const titleMatch = !sTitle
-      ? false  // sem pdfTitle na sessão = não pertence a nenhum PDF específico
-      : sTitle === pdfNorm ||
-        sTitle.includes(pdfNorm) ||
-        pdfNorm.includes(sTitle);
-
-    return topicMatch && titleMatch;
+    const titleNorm = normalize(s.pdfTitle);
+    const topicNorm = normalize(s.topicName);
+    if (!titleNorm && !topicNorm) return false;
+    // Match exato
+    if (titleNorm === pdfNorm) return true;
+    if (topicNorm === pdfNorm) return true;
+    // Match por inclusão (um contém o outro)
+    if (titleNorm && (titleNorm.includes(pdfNorm) || pdfNorm.includes(titleNorm))) return true;
+    if (topicNorm && (topicNorm.includes(pdfNorm) || pdfNorm.includes(topicNorm))) return true;
+    return false;
   });
 
   // KPIs calculados direto das sessões (fonte única de verdade = StudySession)
@@ -592,7 +581,6 @@ export default function MateriasPage() {
                                 key={p.id}
                                 pdf={p}
                                 subjectId={s.id}
-                                topicName={t.name}
                                 onReload={load}
                                 allSessions={allSessions}
                               />
