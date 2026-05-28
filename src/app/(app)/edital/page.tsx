@@ -292,6 +292,48 @@ export default function EditalPage() {
           </div>
         )}
 
+        {/* Progresso por módulo/área */}
+        {data && data.modulos.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">Progresso por Área</p>
+            <div className="space-y-3">
+              {data.modulos.map(mod => {
+                const allTopicos = mod.disciplinas.flatMap(d => d.topicos);
+                const total      = allTopicos.length;
+                const concl      = allTopicos.filter(t => t.concluido).length;
+                const pct        = total > 0 ? Math.round((concl / total) * 100) : 0;
+                const totalQ     = allTopicos.reduce((a, t) => a + t.questoes, 0);
+                const totalAc    = allTopicos.reduce((a, t) => a + t.acertos, 0);
+                const acc        = totalQ > 0 ? Math.round((totalAc / totalQ) * 100) : null;
+                return (
+                  <div key={mod.modulo}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-700">{mod.modulo}</span>
+                        <span className="text-xs text-gray-400">{concl}/{total}</span>
+                        {acc !== null && (
+                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${
+                            acc >= 70 ? "bg-green-100 text-green-700"
+                            : acc >= 50 ? "bg-yellow-100 text-yellow-700"
+                            : "bg-red-100 text-red-700"
+                          }`}>{acc}%</span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: pct === 100 ? "#22c55e" : BG }}>
+                        {pct}%
+                      </span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%`, backgroundColor: pct === 100 ? "#22c55e" : TEAL }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Módulos e Disciplinas */}
         {!loading && data?.modulos.map(mod => (
           <div key={mod.modulo}>
