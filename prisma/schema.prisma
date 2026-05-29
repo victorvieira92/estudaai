@@ -26,6 +26,7 @@ model User {
   weeklyConfig  WeeklyCycleConfig?
   studyBlocks   StudyBlock[]
   editalTopicos EditalTopico[]
+  cycleState    UserCycleState?
 }
 
 model Subject {
@@ -160,7 +161,7 @@ model ErrorNote {
   topic          String?
   banca          String?
   difficulty     String   @default("Media")
-  errorType      String?  // "desatencao" | "nao_estudei" | "nao_lembrei" | "confundi_conceitos" | "interpretacao" | "pegadinha" | "outro"
+  errorType      String?
   resolved       Boolean  @default(false)
   reviewCount    Int      @default(0)
   wrongCount     Int      @default(0)
@@ -261,4 +262,14 @@ model EditalTopico {
 
   @@unique([userId, disciplina, topico])
   @@index([userId])
+}
+
+model UserCycleState {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentDayIdx Int      @default(0)
+  pendingBlocks String   @default("[]")
+  lastDate      String   @default("")
+  updatedAt     DateTime @updatedAt
 }

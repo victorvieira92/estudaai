@@ -18,9 +18,8 @@ const BLOCK_LABEL: Record<string, string> = {
   leitura: "Leitura PDF", exercicios: "Exercícios",
   revisao7d: "Revisão 7d", revisao14_30d: "Revisão 14/30d",
 };
-const CYCLE_KEY     = "estudaai_cycle_day";
-const PENDING_KEY   = "estudaai_pending";
-const LAST_DATE_KEY = "estudaai_last_date";
+// Estado do ciclo salvo no banco via /api/cycle-state (sincroniza entre dispositivos)
+// localStorage mantido apenas como fallback temporário enquanto API carrega
 
 function fmt(h: number) {
   const m = Math.round(h * 60);
@@ -95,12 +94,22 @@ export default function CicloPage() {
   // Para cada índice do ciclo: sessões do dia histórico correspondente
   const [sessionsByIdx,  setSessionsByIdx]   = useState<Record<number, HistSession[]>>({});
 
+  // Salva estado do ciclo no banco (debounced)
+  const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string) => {
+    fetch("/api/cycle-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentDayIdx: dayIdx, pendingBlocks: pending, lastDate }),
+    }).catch(console.error);
+  };
+
   useEffect(() => {
     Promise.all([
       fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
       fetch("/api/subjects").then(r => r.json()).catch(() => []),
       fetch("/api/historico").then(r => r.json()).catch(() => []),
-    ]).then(([bl, su, hist]) => {
+      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0, pendingBlocks: [], lastDate: "" })),
+    ]).then(([bl, su, hist, cycleState]) => {
       const mapped: Block[] = Array.isArray(bl) ? bl.map((b: any) => ({
         id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
         blockType: b.blockType, subjectId: b.subjectId ?? null,
@@ -113,9 +122,11 @@ export default function CicloPage() {
 
       const days       = getCycleDays(mapped);
       const todayDS    = toBRDate(new Date());
-      const lastDate   = localStorage.getItem(LAST_DATE_KEY);
-      const savedIdx   = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
+      const lastDate   = cycleState?.lastDate ?? "";
+      const savedIdx   = cycleState?.currentDayIdx ?? 0;
       const clampedIdx = Math.min(savedIdx, Math.max(0, days.length - 1));
+      // Pendências salvas no banco
+      const savedPendingFromDB: Block[] = cycleState?.pendingBlocks ?? [];
 
       // Mapa de data → sessões (do mais recente para o mais antigo)
       const dateToSessions: Record<string, HistSession[]> = {};
@@ -196,9 +207,6 @@ export default function CicloPage() {
         });
 
         const usedPrev: Record<string, number> = {};
-        const savedPending: Block[] = (() => {
-          try { return JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]"); } catch { return []; }
-        })();
         const newPending: Block[] = [];
         prevBlocks.forEach(b => {
           if (!b.subjectId) return;
@@ -208,24 +216,31 @@ export default function CicloPage() {
           else { newPending.push(b); }
         });
 
-        const nextIdx = (clampedIdx + 1) % days.length;
-        localStorage.setItem(CYCLE_KEY, String(nextIdx));
-        localStorage.setItem(PENDING_KEY, JSON.stringify([...savedPending, ...newPending]));
+        const nextIdx    = (clampedIdx + 1) % days.length;
+        const allPending = [...savedPendingFromDB, ...newPending];
+        saveCycleState(nextIdx, allPending, todayDS);
         setCurrentDayIdx(nextIdx);
-        setPendingBlocks([...savedPending, ...newPending]);
+        setPendingBlocks(allPending);
       } else {
         setCurrentDayIdx(clampedIdx);
-        try { setPendingBlocks(JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]")); } catch { setPendingBlocks([]); }
+        setPendingBlocks(savedPendingFromDB);
       }
 
-      localStorage.setItem(LAST_DATE_KEY, todayDS);
+      // Atualiza lastDate no banco se mudou
+      if (!lastDate || lastDate !== todayDS) {
+        saveCycleState(clampedIdx, savedPendingFromDB, todayDS);
+      }
     }).finally(() => setLoading(false));
   }, []);
 
+  // Verifica virada de meia-noite — recarrega para processar pendências
   useEffect(() => {
-    const iv = setInterval(() => {
-      const last = localStorage.getItem(LAST_DATE_KEY);
-      if (last && last !== toBRDate(new Date())) window.location.reload();
+    const iv = setInterval(async () => {
+      const today = toBRDate(new Date());
+      const res   = await fetch("/api/cycle-state").catch(() => null);
+      if (!res?.ok) return;
+      const state = await res.json();
+      if (state.lastDate && state.lastDate !== today) window.location.reload();
     }, 60000);
     return () => clearInterval(iv);
   }, []);
@@ -268,8 +283,8 @@ export default function CicloPage() {
     setCompleting(true);
     const undone  = allToday.filter(b => !isDone(b));
     const nextIdx = (currentDayIdx + 1) % cycleDays.length;
-    localStorage.setItem(CYCLE_KEY,   String(nextIdx));
-    localStorage.setItem(PENDING_KEY, JSON.stringify(undone));
+    const todayDS = toBRDate(new Date());
+    saveCycleState(nextIdx, undone, todayDS);
     setCurrentDayIdx(nextIdx);
     setPendingBlocks(undone);
     setManualDone({});
@@ -322,9 +337,9 @@ export default function CicloPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm opacity-60">{doneCount}/{totalCount} blocos concluídos</span>
-          <button onClick={() => { const p = (currentDayIdx-1+cycleDays.length)%cycleDays.length; setCurrentDayIdx(p); localStorage.setItem(CYCLE_KEY,String(p)); setManualDone({}); }}
+          <button onClick={() => { const p=(currentDayIdx-1+cycleDays.length)%cycleDays.length; setCurrentDayIdx(p); saveCycleState(p, pendingBlocks, toBRDate(new Date())); setManualDone({}); }}
             className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center font-bold">‹</button>
-          <button onClick={() => { const n = (currentDayIdx+1)%cycleDays.length; setCurrentDayIdx(n); localStorage.setItem(CYCLE_KEY,String(n)); setManualDone({}); }}
+          <button onClick={() => { const n=(currentDayIdx+1)%cycleDays.length; setCurrentDayIdx(n); saveCycleState(n, pendingBlocks, toBRDate(new Date())); setManualDone({}); }}
             className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center font-bold">›</button>
           <button onClick={concludeDay} disabled={completing}
             className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors">
