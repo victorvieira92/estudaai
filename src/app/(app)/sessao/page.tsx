@@ -68,33 +68,7 @@ function SessaoContent() {
   const [error,           setError]           = useState("");
   const [showCelebration, setShowCelebration] = useState(false);
   const [motivPhrase,     setMotivPhrase]     = useState("");
-
-  const FRASES_MOTIVACIONAIS = [
-  "Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.",
-  "O tempo de estudo nunca é um tempo perdido.",
-  "Esse esforço todo vai sim valer a pena.",
-  "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.",
-  "A melhor forma de prever o futuro é criá-lo.",
-  "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.",
-  "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.",
-  "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!",
-  "Só o Papiro Liberta!",
-  "Comece de onde você está. Use o que você tiver. Faça o que você puder.",
-  "Para grandes resultados não existem atalhos.",
-  "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.",
-  "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.",
-  "Um gênio é 10% inspiração e 90% transpiração.",
-  "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.",
-  "É feliz quem sonha, mas só tem sucesso quem se dispõe a pagar o preço para transformar seu sonho em realidade.",
-  "Busque sempre o progresso, não a perfeição.",
-  "Tudo é possível se você se dedicar de cabeça e coração.",
-  "O que é bonito sobre a aprendizagem é que ninguém pode tirá-la de você.",
-  "Aquele que faz perguntas é um bobo por cinco minutos. Mas aquele que jamais questiona é um bobo para sempre.",
-  "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.",
-  "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.",
-  "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.",
-  "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não. Se você não der um passo à frente, estará sempre no mesmo lugar."
-];
+  const FRASES = ["Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.", "O tempo de estudo nunca é um tempo perdido.", "Esse esforço todo vai sim valer a pena.", "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.", "A melhor forma de prever o futuro é criá-lo.", "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.", "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.", "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!", "Só o Papiro Liberta!", "Comece de onde você está. Use o que você tiver. Faça o que você puder.", "Para grandes resultados não existem atalhos.", "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.", "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.", "Um gênio é 10% inspiração e 90% transpiração.", "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.", "Busque sempre o progresso, não a perfeição.", "Tudo é possível se você se dedicar de cabeça e coração.", "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.", "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.", "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.", "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não."];
 
   const subject  = subjects.find(s => s.id === subjectId);
   const topic    = subject?.topics.find(t => t.id === topicId);
@@ -164,31 +138,23 @@ function SessaoContent() {
     const startPage = parseInt(pages[0]?.start) || 0;
     const endPage   = parseInt(pages[0]?.end)   || 0;
 
-    // Calcula a data correta baseada no dateMode
+    // Data retroativa
     let studyDate: string | undefined;
     if (dateMode === "ontem") {
-      const d = new Date();
-      d.setDate(d.getDate() - 1);
+      const d = new Date(); d.setDate(d.getDate() - 1);
       studyDate = d.toISOString().slice(0, 10);
     } else if (dateMode === "outro" && otherDate) {
       studyDate = otherDate;
     }
 
-    // Resolve pdfId pelo material digitado (match por título)
-    // Isso permite atualizar lastPageStudied e progress do PDF automaticamente
+    // Resolve pdfId pelo material digitado
     const norm = (s: string) => s.trim().toLowerCase();
-    const allPdfs = subject?.topics.flatMap(t => t.pdfs) ?? [];
+    const allPdfs = subject?.topics.flatMap((t: any) => t.pdfs) ?? [];
     const matchedPdf = material.trim()
-      ? allPdfs.find(p =>
-          norm(p.title) === norm(material) ||
-          norm(p.title).includes(norm(material)) ||
-          norm(material).includes(norm(p.title))
-        )
+      ? allPdfs.find((p: any) => norm(p.title) === norm(material) || norm(p.title).includes(norm(material)) || norm(material).includes(norm(p.title)))
       : undefined;
-    const resolvedPdfId = matchedPdf?.id ?? "";
-
-    // Páginas: usa o primeiro range preenchido
-    const firstPageRange = pages.find(p => parseInt(p.end) > 0);
+    const resolvedPdfId = (matchedPdf as any)?.id ?? "";
+    const firstPageRange = pages.find((p: any) => parseInt(p.end) > 0);
     const resolvedStart  = parseInt(firstPageRange?.start ?? "0") || 0;
     const resolvedEnd    = parseInt(firstPageRange?.end   ?? "0") || 0;
 
@@ -198,7 +164,7 @@ function SessaoContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           subjectId, topicId,
-          pdfId:     resolvedPdfId,   // ← envia pdfId resolvido pelo título do material
+          pdfId:     resolvedPdfId,
           hours, duration,
           startPage: resolvedStart,
           endPage:   resolvedEnd,
@@ -219,21 +185,21 @@ function SessaoContent() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
 
-      // Verifica se concluiu todas as matérias do dia após salvar
+      // Verifica se concluiu todas as matérias do dia
       try {
-        const schedRes = await fetch(
-          `/api/schedule?cycleDay=${localStorage.getItem("estudaai_cycle_day") ?? "0"}`
-        );
+        const cycleDay = typeof window !== "undefined"
+          ? localStorage.getItem("estudaai_cycle_day") ?? "0"
+          : "0";
+        const schedRes = await fetch(`/api/schedule?cycleDay=${cycleDay}`);
         if (schedRes.ok) {
           const sched = await schedRes.json();
-          // nextBlockType === null significa que todos os blocos do dia foram concluídos
-          if (sched.nextBlockType === null || (sched.todayBlocks ?? []).length === 0) {
-            const frase = FRASES_MOTIVACIONAIS[Math.floor(Math.random() * FRASES_MOTIVACIONAIS.length)];
+          if (sched.nextBlockType === null) {
+            const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
             setMotivPhrase(frase);
             setShowCelebration(true);
           }
         }
-      } catch { /* não bloqueia o save se falhar */ }
+      } catch { /* não bloqueia */ }
 
       if (saveAndNew) resetForm();
     } catch (e: any) {
@@ -243,6 +209,7 @@ function SessaoContent() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
+    <>
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <div className="text-white px-8"
@@ -343,14 +310,9 @@ function SessaoContent() {
                   placeholder="Ex.: Aula 01"
                   className="w-full border-b-2 border-teal-400 outline-none text-sm bg-transparent py-2 text-gray-800 focus:border-teal-600"
                 />
-                {/* Sugestões dos PDFs do tópico selecionado */}
                 <datalist id="material-suggestions">
-                  {topic?.pdfs.map(p => (
-                    <option key={p.id} value={p.title} />
-                  ))}
-                  {!topic && subject?.topics.flatMap(t => t.pdfs).map(p => (
-                    <option key={p.id} value={p.title} />
-                  ))}
+                  {topic?.pdfs?.map((p: any) => <option key={p.id} value={p.title} />)}
+                  {!topic && subject?.topics?.flatMap((t: any) => t.pdfs ?? []).map((p: any) => <option key={p.id} value={p.title} />)}
                 </datalist>
               </div>
             </div>
@@ -530,8 +492,6 @@ function SessaoContent() {
         </div>
       </div>
     </div>
-
-      {/* ── Popup de celebração ── */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
@@ -555,6 +515,7 @@ function SessaoContent() {
           </div>
         </div>
       )}
+    </>
   );
 }
 
