@@ -681,7 +681,7 @@ export default function CadernoPage() {
                           .filter(n => n.subject.name === (subjects.find(s => s.id === subjectId)?.name ?? "") && n.topic && n.topic.toLowerCase().includes(q))
                           .map(n => n.topic!);
 
-                        const suggestions = [...new Set([...fromMaterias, ...fromNotes])].slice(0, 10);
+                        const suggestions = [...new Set([...fromMaterias, ...fromNotes])].slice(0, 30);
                         if (!suggestions.length) return null;
                         return (
                           <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
