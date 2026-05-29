@@ -670,13 +670,10 @@ export default function CadernoPage() {
                         const currentSubject = subjects.find(s => s.id === subjectId);
                         const q = topic.toLowerCase();
 
-                        // 1. Tópicos cadastrados em Matérias (fonte principal)
+                        // 1. Tópicos cadastrados em Matérias (fonte principal — só nomes de tópicos, sem PDFs)
                         const fromMaterias: string[] = [];
                         (currentSubject?.topics ?? []).forEach(t => {
                           if (!q || t.name.toLowerCase().includes(q)) fromMaterias.push(t.name);
-                          t.pdfs.forEach(p => {
-                            if (!q || p.title.toLowerCase().includes(q)) fromMaterias.push(p.title);
-                          });
                         });
 
                         // 2. Tópicos de erros já registrados (complemento)
