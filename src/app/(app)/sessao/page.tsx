@@ -535,17 +535,15 @@ function SessaoContent() {
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center animate-bounce-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
             <div className="text-6xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              Parabéns!
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Parabéns!</h2>
             <p className="text-gray-500 text-sm mb-4">
               Você concluiu todas as matérias previstas para hoje!
             </p>
             <div className="bg-gray-50 rounded-2xl px-5 py-4 mb-6 border border-gray-100">
               <p className="text-gray-700 text-sm leading-relaxed italic">
-                "{motivPhrase}"
+                &ldquo;{motivPhrase}&rdquo;
               </p>
             </div>
             <button
