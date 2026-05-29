@@ -44,6 +44,19 @@ function toBRDate(date: Date): string {
   }
 }
 
+// Retorna a data da segunda-feira da semana atual (semana ISO, seg=início)
+function getCurrentWeekMonday(): string {
+  const today = new Date();
+  const todayDS = toBRDate(today);
+  // Reconstrói a data em BRT para calcular o dia da semana corretamente
+  const d = new Date(todayDS + "T12:00:00");
+  const dow = d.getDay(); // 0=dom, 1=seg, ..., 6=sab
+  const daysFromMon = (dow + 6) % 7; // 0 se seg, 6 se dom
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - daysFromMon);
+  return toBRDate(monday);
+}
+
 // Verifica se houve pelo menos 1 sessão de alguma matéria do ciclo naquela data
 function dayHasCycleStudy(
   sessions: HistSession[],
@@ -132,8 +145,10 @@ export default function CicloPage() {
       // Para cada índice anterior, procura a data mais recente do histórico
       // que tenha sessões do ciclo correspondente, pulando datas já usadas.
 
+      // Filtra apenas datas da semana atual (seg a dom) — ignora retroativos de semanas anteriores
+      const weekMonday = getCurrentWeekMonday();
       const sortedDates = Object.keys(dateToSessions)
-        .filter(d => d < todayDS) // só datas anteriores a hoje
+        .filter(d => d >= weekMonday && d < todayDS) // só desta semana, antes de hoje
         .sort()
         .reverse(); // mais recente primeiro
 
