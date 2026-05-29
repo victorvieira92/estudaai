@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Zap, CheckCircle, AlertTriangle, ArrowRight, Clock } from "lucide-react";
+import { Zap, CheckCircle, AlertTriangle, ArrowRight, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Block {
   id: string; dayOfWeek: number; hours: number;
@@ -18,8 +18,6 @@ const BLOCK_LABEL: Record<string, string> = {
   leitura: "Leitura PDF", exercicios: "Exercícios",
   revisao7d: "Revisão 7d", revisao14_30d: "Revisão 14/30d",
 };
-// Estado do ciclo salvo no banco via /api/cycle-state (sincroniza entre dispositivos)
-// localStorage mantido apenas como fallback temporário enquanto API carrega
 
 function fmt(h: number) {
   const m = Math.round(h * 60);
@@ -43,27 +41,27 @@ function toBRDate(date: Date): string {
   }
 }
 
-// Retorna a data da segunda-feira da semana atual (semana ISO, seg=início)
-function getCurrentWeekMonday(): string {
-  const today = new Date();
-  const todayDS = toBRDate(today);
-  // Reconstrói a data em BRT para calcular o dia da semana corretamente
-  const d = new Date(todayDS + "T12:00:00");
+// Retorna a segunda-feira da semana de uma data YYYY-MM-DD
+function getMondayOfWeek(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
   const dow = d.getDay(); // 0=dom, 1=seg, ..., 6=sab
-  const daysFromMon = (dow + 6) % 7; // 0 se seg, 6 se dom
-  const monday = new Date(d);
-  monday.setDate(d.getDate() - daysFromMon);
-  return toBRDate(monday);
+  const daysFromMon = (dow + 6) % 7;
+  d.setDate(d.getDate() - daysFromMon);
+  return d.toISOString().slice(0, 10);
 }
 
-// Verifica se houve pelo menos 1 sessão de alguma matéria do ciclo naquela data
-function dayHasCycleStudy(
-  sessions: HistSession[],
-  cycleBlocks: Block[]
-): boolean {
-  const cycleSubIds: Record<string, boolean> = {};
-  cycleBlocks.forEach(b => { if (b.subjectId) cycleSubIds[b.subjectId] = true; });
-  return sessions.some(s => cycleSubIds[s.subjectId]);
+// Formata YYYY-MM-DD como "25/05" etc
+function fmtShortDate(dateStr: string): string {
+  const [, m, d] = dateStr.split("-");
+  return `${d}/${m}`;
+}
+
+// Formata semana como "25/05 – 31/05"
+function fmtWeekLabel(mondayStr: string): string {
+  const monday = new Date(mondayStr + "T12:00:00");
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return `${fmtShortDate(mondayStr)} – ${fmtShortDate(sunday.toISOString().slice(0, 10))}`;
 }
 
 // Conta quantos blocos de um ciclo foram cobertos pelas sessões de um dia
@@ -82,19 +80,23 @@ function countDoneBlocks(sessions: HistSession[], cycleBlocks: Block[]): number 
 }
 
 export default function CicloPage() {
-  const [blocks,         setBlocks]         = useState<Block[]>([]);
-  const [subjects,       setSubjects]        = useState<Subject[]>([]);
-  const [loading,        setLoading]         = useState(true);
-  const [currentDayIdx,  setCurrentDayIdx]   = useState(0);
-  const [pendingBlocks,  setPendingBlocks]   = useState<Block[]>([]);
-  const [completing,     setCompleting]      = useState(false);
-  const [todaySessions,  setTodaySessions]   = useState<HistSession[]>([]);
-  const [manualDone,     setManualDone]      = useState<Record<string, boolean>>({});
-  const [selectedDayIdx, setSelectedDayIdx]  = useState<number | null>(null);
-  // Para cada índice do ciclo: sessões do dia histórico correspondente
-  const [sessionsByIdx,  setSessionsByIdx]   = useState<Record<number, HistSession[]>>({});
+  const [blocks,        setBlocks]        = useState<Block[]>([]);
+  const [subjects,      setSubjects]      = useState<Subject[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [currentDayIdx, setCurrentDayIdx] = useState(0);
+  const [pendingBlocks, setPendingBlocks] = useState<Block[]>([]);
+  const [completing,    setCompleting]    = useState(false);
+  const [todaySessions, setTodaySessions] = useState<HistSession[]>([]);
+  const [manualDone,    setManualDone]    = useState<Record<string, boolean>>({});
+  const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null);
 
-  // Salva estado do ciclo no banco (debounced)
+  // dateToSessions: histórico completo (todas as semanas)
+  const [dateToSessions, setDateToSessions] = useState<Record<string, HistSession[]>>({});
+
+  // Semana selecionada no seletor (segunda-feira da semana, YYYY-MM-DD)
+  const [viewWeekMonday, setViewWeekMonday] = useState<string>("");
+
+  // Salva estado do ciclo no banco
   const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string) => {
     fetch("/api/cycle-state", {
       method: "POST",
@@ -120,19 +122,19 @@ export default function CicloPage() {
       setBlocks(mapped);
       setSubjects(subs);
 
-      const days       = getCycleDays(mapped);
-      const todayDS    = toBRDate(new Date());
-      const lastDate   = cycleState?.lastDate ?? "";
-      const savedIdx   = cycleState?.currentDayIdx ?? 0;
+      const days     = getCycleDays(mapped);
+      const todayDS  = toBRDate(new Date());
+      const lastDate = cycleState?.lastDate ?? "";
+      const savedIdx = cycleState?.currentDayIdx ?? 0;
+      // Garante que o índice salvo no banco nunca ultrapassa o total de dias do ciclo
       const clampedIdx = Math.min(savedIdx, Math.max(0, days.length - 1));
-      // Pendências salvas no banco
       const savedPendingFromDB: Block[] = cycleState?.pendingBlocks ?? [];
 
-      // Mapa de data → sessões (do mais recente para o mais antigo)
-      const dateToSessions: Record<string, HistSession[]> = {};
+      // Monta mapa de data → sessões com HISTÓRICO COMPLETO (sem filtro de semana)
+      const dtSess: Record<string, HistSession[]> = {};
       if (Array.isArray(hist)) {
         (hist as any[]).forEach((dayGroup: any) => {
-          dateToSessions[dayGroup.date] = (dayGroup.sessions ?? []).map((s: any) => ({
+          dtSess[dayGroup.date] = (dayGroup.sessions ?? []).map((s: any) => ({
             subjectId:   s.subjectId,
             subjectName: s.subjectName ?? "",
             hours:       s.hours ?? 0,
@@ -142,66 +144,25 @@ export default function CicloPage() {
           }));
         });
       }
+      setDateToSessions(dtSess);
 
       // Sessões de hoje
-      const todaySess = dateToSessions[todayDS] ?? [];
+      const todaySess = dtSess[todayDS] ?? [];
       setTodaySessions(todaySess);
 
-      // ── Lógica de associação ciclo → sessões ─────────────────────────────
-      // Regra: o índice atual (clampedIdx) = hoje.
-      // Índices anteriores = percorre o histórico em ordem reversa,
-      // buscando datas onde houve estudo de matérias daquele ciclo específico.
-      // Ignora datas retroativas que não fazem parte da sequência natural.
-      //
-      // Para cada índice anterior, procura a data mais recente do histórico
-      // que tenha sessões do ciclo correspondente, pulando datas já usadas.
+      // Define semana visualizada como a semana atual
+      const currentWeekMonday = getMondayOfWeek(todayDS);
+      setViewWeekMonday(currentWeekMonday);
 
-      // Filtra apenas datas da semana atual (seg a dom) — ignora retroativos de semanas anteriores
-      const weekMonday = getCurrentWeekMonday();
-      const sortedDates = Object.keys(dateToSessions)
-        .filter(d => d >= weekMonday && d < todayDS) // só desta semana, antes de hoje
-        .sort()
-        .reverse(); // mais recente primeiro
-
-      const sbi: Record<number, HistSession[]> = {};
-      sbi[clampedIdx] = todaySess; // dia atual = hoje
-
-      // Para os dias anteriores do ciclo, associa em ordem reversa
-      // apenas datas que tiveram estudo daquele ciclo
-      const usedDates: Record<string, boolean> = { [todayDS]: true };
-
-      for (let step = 1; step < days.length; step++) {
-        const prevIdx = (clampedIdx - step + days.length) % days.length;
-        const prevDow = days[prevIdx];
-        const prevBlocks = mapped.filter(b => b.dayOfWeek === prevDow);
-
-        // Busca a data mais recente não usada onde houve estudo deste ciclo
-        let found = false;
-        for (const date of sortedDates) {
-          if (usedDates[date]) continue;
-          const sess = dateToSessions[date] ?? [];
-          if (dayHasCycleStudy(sess, prevBlocks)) {
-            sbi[prevIdx] = sess;
-            usedDates[date] = true;
-            found = true;
-            break;
-          }
-        }
-        if (!found) sbi[prevIdx] = []; // nenhuma data encontrada = não estudado
-      }
-
-      setSessionsByIdx(sbi);
-
-      // Verifica se o dia virou
+      // ── Virada de dia ───────────────────────────────────────────────────
+      // Se lastDate existe e é diferente de hoje, o dia virou.
+      // Calculamos pendências do dia anterior e avançamos o índice.
       if (lastDate && lastDate !== todayDS) {
         const prevDay    = days[clampedIdx] ?? -1;
         const prevBlocks = mapped.filter(b => b.dayOfWeek === prevDay);
+        const lastDateSess = dtSess[lastDate] ?? [];
 
-        // Sessões de ontem (ou do último dia antes de hoje)
-        const prevSess = sbi[clampedIdx] ?? []; // antes de atualizar para hoje
         const sessionCountPrev: Record<string, number> = {};
-        // Usa as sessões do último dia registrado (lastDate)
-        const lastDateSess = dateToSessions[lastDate] ?? [];
         lastDateSess.forEach(s => {
           sessionCountPrev[s.subjectId] = (sessionCountPrev[s.subjectId] ?? 0) + 1;
         });
@@ -218,22 +179,23 @@ export default function CicloPage() {
 
         const nextIdx    = (clampedIdx + 1) % days.length;
         const allPending = [...savedPendingFromDB, ...newPending];
+        // Salva UMA VEZ com o índice novo
         saveCycleState(nextIdx, allPending, todayDS);
         setCurrentDayIdx(nextIdx);
         setPendingBlocks(allPending);
       } else {
+        // Mesmo dispositivo, mesmo dia: apenas usa o que veio do banco
         setCurrentDayIdx(clampedIdx);
         setPendingBlocks(savedPendingFromDB);
-      }
-
-      // Atualiza lastDate no banco se mudou
-      if (!lastDate || lastDate !== todayDS) {
-        saveCycleState(clampedIdx, savedPendingFromDB, todayDS);
+        // Atualiza lastDate se o banco estava sem data (primeiro acesso)
+        if (!lastDate) {
+          saveCycleState(clampedIdx, savedPendingFromDB, todayDS);
+        }
       }
     }).finally(() => setLoading(false));
   }, []);
 
-  // Verifica virada de meia-noite — recarrega para processar pendências
+  // Verifica virada de meia-noite
   useEffect(() => {
     const iv = setInterval(async () => {
       const today = toBRDate(new Date());
@@ -245,6 +207,30 @@ export default function CicloPage() {
     return () => clearInterval(iv);
   }, []);
 
+  // ── Listas de semanas disponíveis para o seletor ──────────────────────
+  // Pega todas as semanas que têm pelo menos 1 sessão, + a semana atual
+  const availableWeeks: string[] = (() => {
+    const todayDS = toBRDate(new Date());
+    const currentMonday = getMondayOfWeek(todayDS);
+    const weekSet = new Set<string>([currentMonday]);
+    Object.keys(dateToSessions).forEach(d => weekSet.add(getMondayOfWeek(d)));
+    return Array.from(weekSet).sort().reverse(); // mais recente primeiro
+  })();
+
+  // ── sessionsByIdx: sessões de cada dia do ciclo NA SEMANA VISUALIZADA ──
+  // Regra: Dia N do ciclo na semana X = sessões do dia em que o ciclo estava
+  // no índice N, dentro dessa semana.
+  //
+  // Como o ciclo avança 1 dia por dia útil, e sabemos que:
+  //   - currentDayIdx é o dia atual
+  //   - hoje é toBRDate(new Date())
+  //
+  // Para a semana visualizada, cada dia da semana (seg, ter, ...) pode ter
+  // sessões. Associamos cada data da semana ao índice do ciclo correspondente.
+  //
+  // A âncora é: hoje = currentDayIdx. Cada dia anterior = currentDayIdx - N.
+  // Para dias futuros desta semana: currentDayIdx + N.
+
   const cycleDays   = getCycleDays(blocks);
   const currentDay  = cycleDays[currentDayIdx] ?? -1;
   const todayBlocks = blocks.filter(b => b.dayOfWeek === currentDay);
@@ -255,6 +241,54 @@ export default function CicloPage() {
   todaySessions.forEach(s => {
     sessionCountToday[s.subjectId] = (sessionCountToday[s.subjectId] ?? 0) + 1;
   });
+
+  // Mapa: dayIdx → data real (baseado em hoje como âncora)
+  const idxToDate = (() => {
+    const todayDS = toBRDate(new Date());
+    const result: Record<number, string> = {};
+    if (!cycleDays.length) return result;
+    result[currentDayIdx] = todayDS;
+    // dias anteriores
+    for (let step = 1; step < cycleDays.length; step++) {
+      const prevIdx = (currentDayIdx - step + cycleDays.length) % cycleDays.length;
+      const d = new Date(todayDS + "T12:00:00");
+      d.setDate(d.getDate() - step);
+      result[prevIdx] = d.toISOString().slice(0, 10);
+    }
+    return result;
+  })();
+
+  // Sessões por índice (para o painel de detalhes ao clicar no dia)
+  const sessionsByIdx: Record<number, HistSession[]> = {};
+  cycleDays.forEach((_, idx) => {
+    const date = idxToDate[idx];
+    sessionsByIdx[idx] = date ? (dateToSessions[date] ?? []) : [];
+  });
+
+  // ── getDayStatus: coloração baseada na SEMANA VISUALIZADA ──────────────
+  // Para cada dia do ciclo, verifica se a data correspondente está dentro
+  // da semana visualizada e se tem sessões.
+  const getDayStatus = (idx: number): "current" | "done" | "partial" | "future" | "other-week" => {
+    if (idx === currentDayIdx) return "current";
+
+    const date = idxToDate[idx];
+    if (!date) return "future";
+
+    // Se a data desse índice não pertence à semana visualizada, mostra cinza
+    const weekOfDate = getMondayOfWeek(date);
+    if (weekOfDate !== viewWeekMonday) return "other-week";
+
+    const dayBlocks = blocks.filter(b => b.dayOfWeek === cycleDays[idx]);
+    if (!dayBlocks.length) return "future";
+
+    const sess = dateToSessions[date] ?? [];
+    if (!sess.length) return "future";
+
+    const done = countDoneBlocks(sess, dayBlocks);
+    if (done >= dayBlocks.length) return "done";
+    if (done > 0) return "partial";
+    return "future";
+  };
 
   const computeDoneMaps = () => {
     const done: Record<string, boolean> = {};
@@ -291,18 +325,6 @@ export default function CicloPage() {
     setCompleting(false);
   };
 
-  const getDayStatus = (dayOfWeek: number, idx: number): "current"|"done"|"partial"|"future" => {
-    if (idx === currentDayIdx) return "current";
-    const dayBlocks = blocks.filter(b => b.dayOfWeek === dayOfWeek);
-    const sess      = sessionsByIdx[idx] ?? [];
-    if (!dayBlocks.length) return "future";
-    if (!sess.length) return "future";
-    const done = countDoneBlocks(sess, dayBlocks);
-    if (done === dayBlocks.length) return "done";
-    if (done > 0) return "partial";
-    return "future";
-  };
-
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BG }} />
@@ -319,11 +341,14 @@ export default function CicloPage() {
   );
 
   const DAY_STYLE = {
-    current: { borderColor: BG,        backgroundColor: BG,        color: "#fff"    },
-    done:    { borderColor: "#22c55e", backgroundColor: "#f0fdf4", color: "#16a34a" },
-    partial: { borderColor: "#f59e0b", backgroundColor: "#fffbeb", color: "#d97706" },
-    future:  { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", color: "#6B7280" },
+    current:    { borderColor: BG,        backgroundColor: BG,        color: "#fff"    },
+    done:       { borderColor: "#22c55e", backgroundColor: "#f0fdf4", color: "#16a34a" },
+    partial:    { borderColor: "#f59e0b", backgroundColor: "#fffbeb", color: "#d97706" },
+    future:     { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", color: "#6B7280" },
+    "other-week": { borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", color: "#D1D5DB" },
   };
+
+  const isCurrentWeek = viewWeekMonday === getMondayOfWeek(toBRDate(new Date()));
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -351,6 +376,7 @@ export default function CicloPage() {
 
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
 
+        {/* Progresso do dia */}
         <div className="bg-white rounded-2xl border border-gray-200 p-4">
           <div className="flex justify-between text-sm mb-2">
             <span className="font-medium text-gray-700">Progresso do dia</span>
@@ -362,6 +388,7 @@ export default function CicloPage() {
           </div>
         </div>
 
+        {/* Pendentes */}
         {pendingBlocks.length > 0 && (
           <div>
             <div className="flex items-center gap-2 mb-2 px-1">
@@ -404,6 +431,7 @@ export default function CicloPage() {
           </div>
         )}
 
+        {/* Blocos do dia */}
         <div>
           <p className="text-sm font-semibold text-gray-600 mb-2 px-1">Dia {currentDayIdx + 1} do ciclo</p>
           <div className="space-y-2">
@@ -443,12 +471,43 @@ export default function CicloPage() {
           </div>
         </div>
 
+        {/* Ciclo completo */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5">
           <p className="text-sm font-semibold text-gray-700 mb-3">Ciclo completo</p>
+
+          {/* Seletor de semana */}
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              onClick={() => {
+                const idx = availableWeeks.indexOf(viewWeekMonday);
+                if (idx < availableWeeks.length - 1) setViewWeekMonday(availableWeeks[idx + 1]);
+              }}
+              disabled={availableWeeks.indexOf(viewWeekMonday) >= availableWeeks.length - 1}
+              className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="flex-1 text-center text-sm font-medium text-gray-700">
+              {viewWeekMonday ? fmtWeekLabel(viewWeekMonday) : ""}
+              {isCurrentWeek && <span className="ml-2 text-xs text-green-600 font-semibold">semana atual</span>}
+            </span>
+            <button
+              onClick={() => {
+                const idx = availableWeeks.indexOf(viewWeekMonday);
+                if (idx > 0) setViewWeekMonday(availableWeeks[idx - 1]);
+              }}
+              disabled={availableWeeks.indexOf(viewWeekMonday) <= 0}
+              className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Quadrinhos dos dias */}
           <div className="flex flex-wrap gap-2">
             {cycleDays.map((day, idx) => {
               const dayHours = blocks.filter(b => b.dayOfWeek === day).reduce((a,b) => a+b.hours, 0);
-              const status   = getDayStatus(day, idx);
+              const status   = getDayStatus(idx);
               const st       = DAY_STYLE[status];
               const label    = status === "done" ? " ✓" : status === "partial" ? " ~" : "";
               return (
@@ -460,24 +519,31 @@ export default function CicloPage() {
               );
             })}
           </div>
+
+          {/* Legenda */}
           <div className="flex items-center gap-3 mt-3 flex-wrap text-xs text-gray-500">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Concluído</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" /> Parcial</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: BG }} /> Hoje</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" /> Futuro</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" /> Futuro / outra semana</span>
           </div>
 
+          {/* Detalhe do dia selecionado */}
           {selectedDayIdx !== null && (() => {
             const selDay    = cycleDays[selectedDayIdx];
             const selBlocks = blocks.filter(b => b.dayOfWeek === selDay);
-            const selSess   = sessionsByIdx[selectedDayIdx] ?? [];
+            const selDate   = idxToDate[selectedDayIdx];
+            const selSess   = selDate ? (dateToSessions[selDate] ?? []) : (sessionsByIdx[selectedDayIdx] ?? []);
             const sc2: Record<string,number> = {};
             selSess.forEach(s => { sc2[s.subjectId] = (sc2[s.subjectId]??0)+1; });
             const used3: Record<string,number> = {};
             return (
               <div className="mt-4 border-t border-gray-100 pt-4">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-bold text-gray-900">Dia {selectedDayIdx+1} — Matérias</p>
+                  <div>
+                    <p className="text-sm font-bold text-gray-900">Dia {selectedDayIdx+1} — Matérias</p>
+                    {selDate && <p className="text-xs text-gray-400">{fmtShortDate(selDate)}</p>}
+                  </div>
                   <button onClick={() => setSelectedDayIdx(null)} className="text-xs text-gray-400 hover:text-gray-600">Fechar ✕</button>
                 </div>
                 <div className="space-y-2">

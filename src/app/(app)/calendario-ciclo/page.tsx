@@ -36,29 +36,28 @@ function fmt(h: number) {
   return mm > 0 ? `${hh}h${mm}min` : `${hh}h`;
 }
 
-const CYCLE_KEY = "estudaai_cycle_day";
-
 // Converte blocos para lista de dias ordenados
 function blocksToOrderedDays(blocks: StudyBlock[]): number[] {
   return [...new Set(blocks.map(b => b.dayOfWeek))].sort((a, b) => a - b);
 }
 
 export default function CalendarioCicloPage() {
-  const [subjects,   setSubjects]   = useState<Subject[]>([]);
-  const [blocks,     setBlocks]     = useState<StudyBlock[]>([]);
-  // draft guarda a ordem lógica dos dias como array de dayOfWeek
+  const [subjects,      setSubjects]      = useState<Subject[]>([]);
+  const [blocks,        setBlocks]        = useState<StudyBlock[]>([]);
   const [draftDayOrder, setDraftDayOrder] = useState<number[]>([]);
   const [draftBlocks,   setDraftBlocks]   = useState<StudyBlock[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [saving,     setSaving]     = useState(false);
-  const [showConfig, setShowConfig] = useState(false);
+  const [loading,       setLoading]       = useState(true);
+  const [saving,        setSaving]        = useState(false);
+  const [showConfig,    setShowConfig]    = useState(false);
   const [currentDayIdx, setCurrentDayIdx] = useState(0);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/subjects").then(r => r.json()).catch(() => []),
       fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
-    ]).then(([su, bl]) => {
+      // Lê o estado do ciclo do banco (igual à página /ciclo) — sem localStorage
+      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0 })),
+    ]).then(([su, bl, cycleState]) => {
       const subjects: Subject[] = Array.isArray(su) ? su : su?.subjects ?? [];
       setSubjects(subjects);
       const mapped: StudyBlock[] = Array.isArray(bl) ? bl.map((b: any) => ({
@@ -70,8 +69,9 @@ export default function CalendarioCicloPage() {
       setDraftDayOrder(days);
       setDraftBlocks(mapped);
       if (mapped.length === 0) setShowConfig(true);
-      const saved = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
-      setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
+      // Usa o índice do banco, com clamp para não ultrapassar o tamanho do ciclo
+      const savedIdx = cycleState?.currentDayIdx ?? 0;
+      setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
     }).finally(() => setLoading(false));
   }, []);
 
@@ -80,8 +80,8 @@ export default function CalendarioCicloPage() {
   const subjectColorMap = new Map<string, typeof SUBJECT_COLORS[0]>();
   subjects.forEach((s, i) => subjectColorMap.set(s.id, SUBJECT_COLORS[i % SUBJECT_COLORS.length]));
 
-  const totalHours  = blocks.reduce((a, b) => a + b.hours, 0);
-  const draftTotal  = draftBlocks.reduce((a, b) => a + b.hours, 0);
+  const totalHours = blocks.reduce((a, b) => a + b.hours, 0);
+  const draftTotal = draftBlocks.reduce((a, b) => a + b.hours, 0);
 
   // ── Reordenação de dias ───────────────────────────────────────────────────
   const moveDayUp = (idx: number) => {
@@ -136,11 +136,9 @@ export default function CalendarioCicloPage() {
   };
 
   // ── Salvar ────────────────────────────────────────────────────────────────
-  // Remapeia dayOfWeek para refletir a nova ordem lógica (0 = Dia 1, 1 = Dia 2...)
   const save = async () => {
     setSaving(true);
     try {
-      // Remapeia os dayOfWeek conforme a nova ordem
       const remapped = draftBlocks.map(b => ({
         ...b,
         dayOfWeek: draftDayOrder.indexOf(b.dayOfWeek),
@@ -162,7 +160,12 @@ export default function CalendarioCicloPage() {
         setDraftDayOrder(days);
         setDraftBlocks(mapped);
         setShowConfig(false);
-        localStorage.setItem(CYCLE_KEY, "0");
+        // Ao salvar um novo ciclo, reseta o índice no banco também
+        await fetch("/api/cycle-state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ currentDayIdx: 0, pendingBlocks: [], lastDate: "" }),
+        }).catch(console.error);
         setCurrentDayIdx(0);
       }
     } finally { setSaving(false); }
@@ -176,7 +179,6 @@ export default function CalendarioCicloPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header — cor da logo */}
       <div className="text-white px-8 py-8" style={{ backgroundColor: BG_HEADER }}>
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -236,7 +238,6 @@ export default function CalendarioCicloPage() {
                 <div key={day} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                   <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
                     <div className="flex items-center gap-2">
-                      {/* ✅ Botões de reordenação */}
                       <div className="flex flex-col gap-0.5">
                         <button onClick={() => moveDayUp(dayIdx)} disabled={dayIdx === 0}
                           className="p-0.5 rounded hover:bg-gray-200 disabled:opacity-20 transition-colors">
@@ -324,7 +325,6 @@ export default function CalendarioCicloPage() {
         {/* ── MODO VISUALIZAÇÃO ── */}
         {!showConfig && blocks.length > 0 && (
           <div className="space-y-6">
-            {/* Legenda */}
             <div className="flex flex-wrap gap-2">
               {subjects.filter(s => blocks.some(b => b.subjectId === s.id)).map(s => {
                 const color = subjectColorMap.get(s.id);
@@ -336,7 +336,6 @@ export default function CalendarioCicloPage() {
               })}
             </div>
 
-            {/* Grid de dias */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {cycleDays.map((day, idx) => {
                 const dayBlocks = blocks.filter(b => b.dayOfWeek === day);
@@ -382,7 +381,6 @@ export default function CalendarioCicloPage() {
               })}
             </div>
 
-            {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: "Horas por ciclo",  value: fmt(totalHours) },
