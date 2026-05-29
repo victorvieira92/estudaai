@@ -681,7 +681,7 @@ export default function CadernoPage() {
 
                         // 2. Tópicos de erros já registrados (complemento)
                         const fromNotes = notes
-                          .filter(n => n.subject.id === subjectId && n.topic && n.topic.toLowerCase().includes(q))
+                          .filter(n => n.subject.name === (subjects.find(s => s.id === subjectId)?.name ?? "") && n.topic && n.topic.toLowerCase().includes(q))
                           .map(n => n.topic!);
 
                         const suggestions = [...new Set([...fromMaterias, ...fromNotes])].slice(0, 10);
