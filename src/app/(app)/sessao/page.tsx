@@ -1,577 +1,533 @@
 "use client";
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Zap, CheckCircle, AlertTriangle, ArrowRight, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
+import { ChevronDown, Plus, X, AlertCircle } from "lucide-react";
 
-interface Block {
-  id:          string;
-  dayOfWeek:   number;
-  hours:       number;
-  blockType:   string;
-  subjectId:   string | null;
-  subjectName: string | null;
-}
-interface Subject { id: string; name: string; }
-interface TodaySession {
-  subjectId:   string;
-  subjectName: string;
-  hours:       number;
-  questions:   number;
-  correct:     number;
-  wrong:       number;
-  createdAt:   string;
-}
+const BG = "#1B4040";
+const ACCENT = "#2DD4BF"; // teal claro para bordas/checks igual nas imagens
 
-const BG_HEADER = "#1B4040";
+interface Pdf     { id: string; title: string; completed: boolean; totalPages: number; lastPageStudied: number; }
+interface Topic   { id: string; name: string; pdfs: Pdf[]; }
+interface Subject { id: string; name: string; topics: Topic[]; }
 
-const BLOCK_TYPE_LABEL: Record<string, string> = {
-  leitura:       "Leitura PDF",
-  exercicios:    "Exercícios",
-  revisao7d:     "Revisão 7d",
-  revisao14_30d: "Revisão 14/30d",
-};
+interface VideoAula { id: string; title: string; start: string; end: string; }
+interface PageRange { id: string; start: string; end: string; }
 
-const CYCLE_KEY   = "estudaai_cycle_day";
-const PENDING_KEY = "estudaai_pending";
+const CATEGORIES = ["Teoria", "Exercícios", "Revisão", "Leitura de Lei", "Videoaula"];
+const DEFAULT_REVIEWS = ["1d", "7d", "30d"];
 
-function fmt(h: number) {
-  const totalMin = Math.round(h * 60);
-  if (totalMin < 60) return `${totalMin}min`;
-  const hh = Math.floor(totalMin / 60); const mm = totalMin % 60;
-  return mm > 0 ? `${hh}h${mm}min` : `${hh}h`;
+async function safeFetch<T>(url: string): Promise<T | null> {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    const t = await r.text();
+    if (!t.trim()) return null;
+    return JSON.parse(t);
+  } catch { return null; }
 }
 
-function getCycleDays(blocks: Block[]): number[] {
-  return [...new Set(blocks.map(b => b.dayOfWeek))].sort((a, b) => a - b);
-}
+const uid = () => Math.random().toString(36).slice(2, 8);
 
-function toBRDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(date);
-}
+// ── Estilos reutilizáveis ─────────────────────────────────────────────────
+const labelCls  = "block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1";
+const inputCls  = "w-full border-b-2 outline-none text-center font-semibold bg-transparent transition-colors focus:border-teal-500";
+const selectBox = "w-full appearance-none border-b-2 border-teal-400 bg-transparent py-2 px-0 text-sm text-gray-800 focus:outline-none focus:border-teal-600 pr-6";
 
-export default function CicloPage() {
-  const [blocks,        setBlocks]        = useState<Block[]>([]);
-  const [subjects,      setSubjects]      = useState<Subject[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [currentDayIdx, setCurrentDayIdx] = useState(0);
-  const [pendingBlocks, setPendingBlocks] = useState<Block[]>([]);
-  const [completing,    setCompleting]    = useState(false);
+const FRASES = ["Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.", "O tempo de estudo nunca é um tempo perdido.", "Esse esforço todo vai sim valer a pena.", "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.", "A melhor forma de prever o futuro é criá-lo.", "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.", "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.", "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!", "Só o Papiro Liberta!", "Comece de onde você está. Use o que você tiver. Faça o que você puder.", "Para grandes resultados não existem atalhos.", "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.", "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.", "Um gênio é 10% inspiração e 90% transpiração.", "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.", "Busque sempre o progresso, não a perfeição.", "Tudo é possível se você se dedicar de cabeça e coração.", "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.", "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.", "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.", "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não."];
 
-  // Sessões de hoje (vindas da API — fonte da verdade)
-  const [todaySessions, setTodaySessions] = useState<TodaySession[]>([]);
+function SessaoContent() {
+  const searchParams = useSearchParams();
 
-  // Para cada dia do ciclo: Set de subjectIds estudados naquela data histórica
-  const [historyByDay, setHistoryByDay]   = useState<Record<number, Set<string>>>({});
+  // ── Dados do formulário ───────────────────────────────────────────────
+  const [dateMode,       setDateMode]       = useState<"hoje" | "ontem" | "outro">("hoje");
+  const [otherDate,      setOtherDate]      = useState("");
+  const [subjects,       setSubjects]       = useState<Subject[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [subjectId,      setSubjectId]      = useState("");
+  const [topicId,        setTopicId]        = useState("");
+  const [category,       setCategory]       = useState("Teoria");
+  const [material,       setMaterial]       = useState("");
+  const [studyTime,      setStudyTime]      = useState("00:00:00");
+  const [theoryDone,     setTheoryDone]     = useState(false);
+  const [scheduleReview, setScheduleReview] = useState(false);
+  const [reviewTags,     setReviewTags]     = useState<string[]>(DEFAULT_REVIEWS);
+  const [newReview,      setNewReview]      = useState("");
 
-  // Dia selecionado no Ciclo completo para ver detalhes
-  const [selectedDayIdx, setSelectedDayIdx] = useState<number | null>(null);
+  // Questões
+  const [correct,    setCorrect]    = useState("0");
+  const [wrong,      setWrong]      = useState("0");
 
-  // Verifica automaticamente à meia-noite se o dia virou
-  // Se virou, move blocos não feitos para pendências e avança o ciclo
+  // Páginas (múltiplas)
+  const [pages, setPages] = useState<PageRange[]>([{ id: uid(), start: "0", end: "0" }]);
+
+  // Videoaulas (múltiplas)
+  const [videos, setVideos] = useState<VideoAula[]>([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
+
+  const [comment,      setComment]      = useState("");
+  const [saveAndNew,   setSaveAndNew]   = useState(false);
+  const [saving,          setSaving]          = useState(false);
+  const [saved,           setSaved]           = useState(false);
+  const [error,           setError]           = useState("");
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [motivPhrase,     setMotivPhrase]     = useState("");
+
+  const subject  = subjects.find(s => s.id === subjectId);
+  const topic    = subject?.topics.find(t => t.id === topicId);
+  const canSave  = !!subjectId;
+
+  // ── Carregar disciplinas ──────────────────────────────────────────────
   useEffect(() => {
-    const checkMidnight = () => {
-      const lastDate = localStorage.getItem("estudaai_last_date");
-      const todayDS  = toBRDate(new Date());
-      if (lastDate && lastDate !== todayDS) {
-        // Dia virou — move não feitos para pendências
-        const savedBlocks: Block[] = (() => {
-          try { return JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]"); } catch { return []; }
-        })();
-        // Os blocos não feitos de ontem viram pendências
-        // O ciclo avança automaticamente
-        const savedIdx = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
-        // Não avança aqui — só marca o dia como virado
-        // O avanço acontece no próximo load com os blocos não feitos já como pendências
-        localStorage.setItem("estudaai_last_date", todayDS);
-      } else if (!lastDate) {
-        localStorage.setItem("estudaai_last_date", todayDS);
-      }
-    };
-    checkMidnight();
-
-    // Verifica a cada minuto se virou meia-noite
-    const interval = setInterval(checkMidnight, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
-      fetch("/api/subjects").then(r => r.json()).catch(() => []),
-      fetch("/api/historico").then(r => r.json()).catch(() => []),
-    ]).then(([bl, su, hist]) => {
-      const mapped: Block[] = Array.isArray(bl) ? bl.map((b: any) => ({
-        id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
-        blockType: b.blockType, subjectId: b.subjectId ?? null, subjectName: b.subject?.name ?? null,
-      })) : [];
-      const subs: Subject[] = Array.isArray(su) ? su : su?.subjects ?? [];
-      setBlocks(mapped);
-      setSubjects(subs);
-
-      const days = getCycleDays(mapped);
-
-      // Verifica se o dia virou desde a última visita
-      // Se virou, os blocos não concluídos do dia anterior viram pendências
-      const lastDate = localStorage.getItem("estudaai_last_date");
-      const todayDS  = toBRDate(new Date());
-
-      if (lastDate && lastDate !== todayDS) {
-        // Dia virou — o que estava no dia atual e não foi feito vira pendência
-        // Carrega os blocos do dia anterior (que era o currentDayIdx salvo)
-        const prevIdx    = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
-        const prevDays   = getCycleDays(mapped);
-        const prevDay    = prevDays[prevIdx] ?? -1;
-        const prevBlocks = mapped.filter(b => b.dayOfWeek === prevDay);
-
-        // Busca sessões de ontem para saber o que foi feito
-        const yesterdayDS = (() => {
-          const d = new Date();
-          d.setDate(d.getDate() - 1);
-          return toBRDate(d);
-        })();
-        // Sessions de ontem vêm do histórico já carregado
-        const histAny = hist as any[];
-        const yesterdayGroup = histAny.find((d: any) => d.date === yesterdayDS);
-        const yesterdaySessions = yesterdayGroup?.sessions ?? [];
-        const yesterdayStudied = new Set<string>(yesterdaySessions.map((s: any) => s.subjectId));
-
-        // Blocos não feitos ontem = pendências
-        const sessionCountYesterday: Record<string, number> = {};
-        for (const s of yesterdaySessions) {
-          sessionCountYesterday[s.subjectId] = (sessionCountYesterday[s.subjectId] ?? 0) + 1;
-        }
-        const usedYesterday: Record<string, number> = {};
-        const savedPending: Block[] = (() => {
-          try { return JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]"); } catch { return []; }
-        })();
-
-        const newPending: Block[] = [];
-        for (const b of prevBlocks) {
-          if (!b.subjectId) continue;
-          const available = sessionCountYesterday[b.subjectId] ?? 0;
-          const used      = usedYesterday[b.subjectId] ?? 0;
-          if (used < available) { usedYesterday[b.subjectId] = used + 1; }
-          else { newPending.push(b); }
-        }
-
-        // Avança o ciclo para o próximo dia
-        const nextIdx = (prevIdx + 1) % prevDays.length;
-        localStorage.setItem(CYCLE_KEY, String(nextIdx));
-        localStorage.setItem(PENDING_KEY, JSON.stringify([...savedPending, ...newPending]));
-        localStorage.setItem("estudaai_last_date", todayDS);
-
-        setCurrentDayIdx(nextIdx);
-        setPendingBlocks([...savedPending, ...newPending]);
-      } else {
-        const savedIdx = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
-        const valid    = Math.min(savedIdx, Math.max(0, days.length - 1));
-        setCurrentDayIdx(valid);
-        try { setPendingBlocks(JSON.parse(localStorage.getItem(PENDING_KEY) ?? "[]")); } catch { setPendingBlocks([]); }
-      }
-
-      localStorage.setItem("estudaai_last_date", todayDS);
-
-      // ── Processa histórico para saber quais matérias foram estudadas ─────
-      if (Array.isArray(hist)) {
-        // Sessões de hoje
-        const todayDS = toBRDate(new Date());
-        const todayGroup = hist.find((d: any) => d.date === todayDS);
-        setTodaySessions(todayGroup?.sessions ?? []);
-
-        // Para cada dia do ciclo (dayOfWeek 0..N), descobre a data passada
-        // correspondente e verifica quais matérias foram estudadas
-        // Estratégia: percorre o histórico completo e mapeia por cycleDay
-        // Precisamos saber: "no último ciclo em que era o dia X, quais matérias foram vistas?"
-        // Simplificação prática: olha as ÚLTIMAS ocorrências de cada cycleDay
-        // baseado nas datas do histórico ordenadas
-
-        // Monta um mapa de data → Set<subjectId>
-        const dateToSubjects: Record<string, Set<string>> = {};
-        for (const dayGroup of hist as any[]) {
-          const set = new Set<string>();
-          for (const s of dayGroup.sessions ?? []) {
-            if (s.subjectId) set.add(s.subjectId);
-          }
-          dateToSubjects[dayGroup.date] = set;
-        }
-
-        // Para colorir os dias do ciclo, precisa saber:
-        // "O dia X do ciclo foi completamente estudado?"
-        // Como o ciclo não tem datas fixas, usamos uma heurística:
-        // os últimos N dias do histórico correspondem a N dias do ciclo
-        // Aqui apenas olhamos se cada dayOfWeek único tem sessões de hoje
-        // (para o dia atual) e deixamos os outros como estado neutro
-        // A coloração real por histórico requer persistir qual data = qual dia do ciclo
-        // que não temos agora — implementamos com o que temos
-
-        // Para os dias passados, usamos o histórico dos últimos 7 dias como proxy
-        const sortedDates = Object.keys(dateToSubjects).sort().reverse();
-        const hbd: Record<number, Set<string>> = {};
-        const uniqueDays = [...new Set(mapped.map(b => b.dayOfWeek))].sort((a,b) => a-b);
-        const savedCycleIdx = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
-
-        // Associa cada dia do ciclo ao dia de histórico correspondente
-        // O dia atual (currentDayIdx) = hoje, dia anterior = ontem, etc.
-        uniqueDays.forEach((dayOfWeek, idx) => {
-          const daysBack = (savedCycleIdx - idx + uniqueDays.length) % uniqueDays.length;
-          const dateForDay = sortedDates[daysBack];
-          if (dateForDay) {
-            hbd[dayOfWeek] = dateToSubjects[dateForDay] ?? new Set();
-          } else {
-            hbd[dayOfWeek] = new Set();
-          }
-        });
-        setHistoryByDay(hbd);
-      }
+    safeFetch<Subject[]>("/api/subjects").then(d => {
+      if (!d) return;
+      const list: Subject[] = Array.isArray(d) ? d : (d as any).subjects ?? [];
+      setSubjects(list);
+      const urlSubjectId = searchParams.get("subjectId");
+      if (!urlSubjectId) return;
+      const matched = list.find(s => s.id === urlSubjectId);
+      if (!matched) return;
+      setSubjectId(matched.id);
+      const firstTopic = matched.topics.find(t => t.pdfs.some(p => !p.completed));
+      if (!firstTopic) return;
+      setTopicId(firstTopic.id);
     }).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cycleDays   = getCycleDays(blocks);
-  const currentDay  = cycleDays[currentDayIdx] ?? -1;
-  const todayBlocks = blocks.filter(b => b.dayOfWeek === currentDay);
-  const allToday    = [...pendingBlocks, ...todayBlocks];
-  const totalHours  = allToday.reduce((a, b) => a + b.hours, 0);
+  useEffect(() => { setTopicId(""); setMaterial(""); }, [subjectId]);
+  useEffect(() => { setMaterial(""); }, [topicId]);
 
-  // ── Determina automaticamente quais blocos estão feitos ─────────────────
-  // Um bloco está feito se existe sessão de hoje para aquela matéria
-  const studiedTodayIds = new Set(todaySessions.map(s => s.subjectId));
+  // ── Tags de revisão ───────────────────────────────────────────────────
+  const addReviewTag = () => {
+    const v = newReview.trim();
+    if (!v || reviewTags.includes(v)) return;
+    setReviewTags([...reviewTags, v]); setNewReview("");
+  };
+  const removeReviewTag = (tag: string) => setReviewTags(reviewTags.filter(t => t !== tag));
 
-  const isBlockDone = (block: Block): boolean => {
-    if (!block.subjectId) return false;
-    return studiedTodayIds.has(block.subjectId);
+  // ── Páginas ───────────────────────────────────────────────────────────
+  const addPage    = () => setPages([...pages, { id: uid(), start: "0", end: "0" }]);
+  const removePage = (id: string) => setPages(pages.filter(p => p.id !== id));
+  const updatePage = (id: string, field: "start" | "end", val: string) =>
+    setPages(pages.map(p => p.id === id ? { ...p, [field]: val } : p));
+
+  // ── Videoaulas ────────────────────────────────────────────────────────
+  const addVideo    = () => setVideos([...videos, { id: uid(), title: `Vídeo ${String(videos.length + 1).padStart(2,"0")}`, start: "00:00:00", end: "00:00:00" }]);
+  const removeVideo = (id: string) => setVideos(videos.filter(v => v.id !== id));
+  const updateVideo = (id: string, field: keyof VideoAula, val: string) =>
+    setVideos(videos.map(v => v.id === id ? { ...v, [field]: val } : v));
+
+  // ── Salvar ────────────────────────────────────────────────────────────
+  const resetForm = () => {
+    setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicId("");
+    setMaterial(""); setTheoryDone(false); setScheduleReview(false);
+    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0");
+    setPages([{ id: uid(), start: "0", end: "0" }]);
+    setVideos([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
+    setComment(""); setDateMode("hoje"); setOtherDate("");
   };
 
-  // Conta sessões por matéria hoje para marcar blocos na ordem
-  // Ex: Auditoria tem 2 blocos → precisa de 2 sessões para marcar os 2
-  const sessionCountBySubject: Record<string, number> = {};
-  for (const s of todaySessions) {
-    sessionCountBySubject[s.subjectId] = (sessionCountBySubject[s.subjectId] ?? 0) + 1;
-  }
-  // usedCount controla quantos blocos de cada matéria já foram "consumidos" pelas sessões
-  const usedCount: Record<string, number> = {};
-  const doneCount  = allToday.filter(b => {
-    if (!b.subjectId) return manualDone.has(b.id);
-    const available = sessionCountBySubject[b.subjectId] ?? 0;
-    const used      = usedCount[b.subjectId] ?? 0;
-    if (used < available) { usedCount[b.subjectId] = used + 1; return true; }
-    return manualDone.has(b.id);
-  }).length;
-  const totalCount = allToday.length;
+  const doSave = async () => {
+    if (!canSave) { setError("Selecione a disciplina."); return; }
+    setSaving(true); setError("");
 
-  // Toggle manual ainda disponível para casos edge
-  const [manualDone, setManualDone] = useState<Set<string>>(new Set());
-  const toggleManual = (id: string) => {
-    setManualDone(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-  // isEffectivelyDone: considera ordem dos blocos — 1ª sessão marca 1º bloco, 2ª sessão marca 2º bloco
-  const computeBlockDoneMap = (): Set<string> => {
-    const done = new Set<string>();
-    const used: Record<string, number> = {};
-    for (const b of allToday) {
-      if (!b.subjectId) {
-        if (manualDone.has(b.id)) done.add(b.id);
-        continue;
-      }
-      const available = sessionCountBySubject[b.subjectId] ?? 0;
-      const u = used[b.subjectId] ?? 0;
-      if (u < available) { done.add(b.id); used[b.subjectId] = u + 1; }
-      else if (manualDone.has(b.id)) done.add(b.id);
+    // parse studyTime HH:MM:SS → seconds → hours
+    const [hh, mm, ss] = studyTime.split(":").map(Number);
+    const seconds = (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0);
+    const hours   = seconds / 3600;
+    const duration = Math.max(1, Math.round(hours * 60));
+
+    const startPage = parseInt(pages[0]?.start) || 0;
+    const endPage   = parseInt(pages[0]?.end)   || 0;
+
+    // Data retroativa
+    let studyDate: string | undefined;
+    if (dateMode === "ontem") {
+      const d = new Date(); d.setDate(d.getDate() - 1);
+      studyDate = d.toISOString().slice(0, 10);
+    } else if (dateMode === "outro" && otherDate) {
+      studyDate = otherDate;
     }
-    return done;
+
+    // Resolve pdfId pelo material digitado
+    const norm = (s: string) => s.trim().toLowerCase();
+    const allPdfs = subject?.topics.flatMap((t: any) => t.pdfs) ?? [];
+    const matchedPdf = material.trim()
+      ? allPdfs.find((p: any) => norm(p.title) === norm(material) || norm(p.title).includes(norm(material)) || norm(material).includes(norm(p.title)))
+      : undefined;
+    const resolvedPdfId = (matchedPdf as any)?.id ?? "";
+    const firstPageRange = pages.find((p: any) => parseInt(p.end) > 0);
+    const resolvedStart  = parseInt(firstPageRange?.start ?? "0") || 0;
+    const resolvedEnd    = parseInt(firstPageRange?.end   ?? "0") || 0;
+
+    try {
+      const res = await fetch("/api/study-sessions", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subjectId, topicId,
+          pdfId:     resolvedPdfId,
+          hours, duration,
+          startPage: resolvedStart,
+          endPage:   resolvedEnd,
+          totalPages: 0,
+          questions:        (parseInt(correct) || 0) + (parseInt(wrong) || 0),
+          correctQuestions: parseInt(correct) || 0,
+          wrongQuestions:   parseInt(wrong)   || 0,
+          completed:        theoryDone,
+          category,
+          topicName: topic?.name ?? "",
+          pdfTitle:  material,
+          comment,
+          studyDate,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? "Erro ao salvar.");
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+
+      // Verifica se concluiu todas as matérias do dia
+      try {
+        const cycleDay = typeof window !== "undefined"
+          ? localStorage.getItem("estudaai_cycle_day") ?? "0"
+          : "0";
+        const schedRes = await fetch(`/api/schedule?cycleDay=${cycleDay}`);
+        if (schedRes.ok) {
+          const sched = await schedRes.json();
+          if (sched.nextBlockType === null) {
+            const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
+            setMotivPhrase(frase);
+            setShowCelebration(true);
+          }
+        }
+      } catch { /* não bloqueia */ }
+
+      if (saveAndNew) resetForm();
+    } catch (e: any) {
+      setError(e.message);
+    } finally { setSaving(false); }
   };
-  const blockDoneSet = computeBlockDoneMap();
-  const isEffectivelyDone = (block: Block) => blockDoneSet.has(block.id);
 
-  const concludeDay = () => {
-    setCompleting(true);
-    const undone  = allToday.filter(b => !isEffectivelyDone(b));
-    const nextIdx = (currentDayIdx + 1) % cycleDays.length;
-    localStorage.setItem(CYCLE_KEY,   String(nextIdx));
-    localStorage.setItem(PENDING_KEY, JSON.stringify(undone));
-    setCurrentDayIdx(nextIdx);
-    setPendingBlocks(undone);
-    setManualDone(new Set());
-    setCompleting(false);
-  };
-
-  // ── Status de cada dia do ciclo ──────────────────────────────────────────
-  type DayStatus = "current" | "done" | "partial" | "future";
-  const getDayStatus = (dayOfWeek: number, idx: number): DayStatus => {
-    if (idx === currentDayIdx) return "current";
-    const dayBlocks  = blocks.filter(b => b.dayOfWeek === dayOfWeek);
-    const studied    = historyByDay[dayOfWeek] ?? new Set();
-    const subjectIds = dayBlocks.map(b => b.subjectId).filter(Boolean) as string[];
-    if (subjectIds.length === 0) return "future";
-    const studiedCount = subjectIds.filter(id => studied.has(id)).length;
-    if (studiedCount === subjectIds.length) return "done";
-    if (studiedCount > 0) return "partial";
-    return "future";
-  };
-
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BG_HEADER }} />
-    </div>
-  );
-
-  if (blocks.length === 0) return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 text-center px-6">
-      <p className="text-gray-500 text-lg font-medium">Nenhum ciclo configurado</p>
-      <p className="text-gray-400 text-sm">Configure seus dias de estudo no Calendário do Ciclo.</p>
-      <Link href="/calendario-ciclo"
-        className="px-5 py-2.5 text-white rounded-xl text-sm font-semibold"
-        style={{ backgroundColor: BG_HEADER }}>
-        Configurar calendário
-      </Link>
-    </div>
-  );
-
-  const effectiveDoneCount = allToday.filter(b => isEffectivelyDone(b)).length;
-
+  // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+    <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <div className="text-white px-8 py-8 flex items-center justify-between flex-wrap gap-4"
-        style={{ backgroundColor: BG_HEADER }}>
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Zap className="w-6 h-6 text-yellow-300" />
-            <h1 className="text-3xl font-bold">Fila do Dia</h1>
-          </div>
-          <p className="text-sm opacity-60">
-            Dia {currentDayIdx + 1} do ciclo · {fmt(totalHours)} programadas
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm opacity-60">{effectiveDoneCount}/{totalCount} blocos concluídos</span>
-          {/* Navegação manual ← → */}
-          <button onClick={() => {
-            const prev = (currentDayIdx - 1 + cycleDays.length) % cycleDays.length;
-            setCurrentDayIdx(prev);
-            localStorage.setItem(CYCLE_KEY, String(prev));
-            setManualDone(new Set());
-          }} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white font-bold transition-colors">‹</button>
-          <button onClick={() => {
-            const next = (currentDayIdx + 1) % cycleDays.length;
-            setCurrentDayIdx(next);
-            localStorage.setItem(CYCLE_KEY, String(next));
-            setManualDone(new Set());
-          }} className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 flex items-center justify-center text-white font-bold transition-colors">›</button>
-          <button onClick={concludeDay} disabled={completing}
-            className="flex items-center gap-2 px-5 py-2.5 bg-green-500 hover:bg-green-400 disabled:opacity-50 text-white font-semibold rounded-xl text-sm transition-colors">
-            <CheckCircle className="w-4 h-4" />
-            {completing ? "Avançando..." : "Concluir dia"}
-          </button>
-        </div>
+      <div className="text-white px-8"
+        style={{ backgroundColor: BG, minHeight: 100, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: "rgba(255,255,255,0.5)" }}>Registro</p>
+        <h1 className="text-3xl font-bold">Sessão de Estudo</h1>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
 
-        {/* Barra de progresso */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4">
-          <div className="flex justify-between text-sm mb-2">
-            <span className="font-medium text-gray-700">Progresso do dia</span>
-            <span className="text-gray-500">{effectiveDoneCount} de {totalCount} blocos</span>
-          </div>
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all"
-              style={{ width: totalCount > 0 ? `${(effectiveDoneCount / totalCount) * 100}%` : "0%", backgroundColor: "#22C55E" }} />
-          </div>
-          {todaySessions.length > 0 && (
-            <p className="text-xs text-green-600 mt-2">
-              ✓ {studiedTodayIds.size} matéria(s) estudada(s) hoje detectadas automaticamente
-            </p>
-          )}
-        </div>
-
-        {/* Pendentes */}
-        {pendingBlocks.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-2 px-1">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
-              <p className="text-sm font-semibold text-red-600">
-                Pendentes de dias anteriores ({pendingBlocks.length})
-              </p>
-            </div>
-            <div className="space-y-2">
-              {pendingBlocks.map(block => {
-                const done = isEffectivelyDone(block);
-                const name = block.subjectName ?? subjects.find(s => s.id === block.subjectId)?.name ?? "Sem matéria";
-                return (
-                  <div key={block.id}
-                    className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${done ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                        <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Pendente</span>
-                        <span className="text-xs text-gray-500">{fmt(block.hours)}</span>
-                        <span className="text-xs text-gray-400">{BLOCK_TYPE_LABEL[block.blockType] ?? block.blockType}</span>
-                        {isBlockDone(block) && <span className="text-xs text-green-600 font-medium">✓ estudado hoje</span>}
-                      </div>
-                      <p className="font-semibold text-gray-900">{name}</p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {block.subjectId && !done && (
-                        <Link href={`/sessao?subjectId=${block.subjectId}`}
-                          className="text-xs text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
-                          style={{ backgroundColor: BG_HEADER }}>
-                          Estudar <ArrowRight className="w-3 h-3" />
-                        </Link>
-                      )}
-                      <button onClick={() => toggleManual(block.id)}
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${done ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400"}`}>
-                        {done && <CheckCircle className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Blocos do dia atual */}
-        <div>
-          <p className="text-sm font-semibold text-gray-600 mb-2 px-1">Dia {currentDayIdx + 1} do ciclo</p>
-          <div className="space-y-2">
-            {todayBlocks.map((block, i) => {
-              const done = isEffectivelyDone(block);
-              const autoDetected = isBlockDone(block);
-              const name = block.subjectName ?? "Sem matéria";
-              return (
-                <div key={block.id}
-                  className={`flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${done ? "bg-green-50 border-green-200" : "bg-white border-gray-200"}`}>
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 ${done ? "bg-green-500 text-white" : "bg-gray-100 text-gray-600"}`}>
-                    {done ? <CheckCircle className="w-5 h-5" /> : i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className="text-xs text-gray-500 flex items-center gap-1">
-                        <Clock className="w-3 h-3" /> {fmt(block.hours)}
-                      </span>
-                      <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                        {BLOCK_TYPE_LABEL[block.blockType] ?? block.blockType}
-                      </span>
-                      {autoDetected && (
-                        <span className="text-xs text-green-600 font-medium">✓ registrado hoje</span>
-                      )}
-                    </div>
-                    <p className={`font-semibold ${done ? "line-through text-gray-400" : "text-gray-900"}`}>{name}</p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {block.subjectId && !done && (
-                      <Link href={`/sessao?subjectId=${block.subjectId}`}
-                        className="text-xs text-white px-3 py-1.5 rounded-lg font-medium flex items-center gap-1"
-                        style={{ backgroundColor: BG_HEADER }}>
-                        Começar <ArrowRight className="w-3 h-3" />
-                      </Link>
-                    )}
-                    {/* Bolinha manual — ainda disponível para override */}
-                    {!autoDetected && (
-                      <button onClick={() => toggleManual(block.id)}
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${manualDone.has(block.id) ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400"}`}>
-                        {manualDone.has(block.id) && <CheckCircle className="w-4 h-4" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Ciclo completo — clicável com status por cor */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5">
-          <p className="text-sm font-semibold text-gray-700 mb-3">Ciclo completo</p>
-          <div className="flex flex-wrap gap-2">
-            {cycleDays.map((day, idx) => {
-              const dayHours = blocks.filter(b => b.dayOfWeek === day).reduce((a, b) => a + b.hours, 0);
-              const status   = getDayStatus(day, idx);
-              const isSelected = selectedDayIdx === idx;
-
-              const styles: Record<string, { border: string; bg: string; color: string; label?: string }> = {
-                current:  { border: BG_HEADER, bg: BG_HEADER, color: "#fff" },
-                done:     { border: "#22c55e", bg: "#f0fdf4", color: "#16a34a", label: "✓" },
-                partial:  { border: "#f59e0b", bg: "#fffbeb", color: "#d97706", label: "~" },
-                future:   { border: "#E5E7EB", bg: "#F9FAFB", color: "#6B7280" },
-              };
-              const st = styles[status];
-
-              return (
-                <button key={day} onClick={() => setSelectedDayIdx(isSelected ? null : idx)}
-                  className="flex flex-col items-center px-4 py-2 rounded-xl border-2 text-sm transition-all hover:scale-105"
-                  style={{ borderColor: st.border, backgroundColor: st.bg, color: st.color }}>
-                  <span className="font-bold">Dia {idx + 1} {st.label ?? ""}</span>
-                  <span className="text-xs mt-0.5 opacity-70">{fmt(dayHours)}</span>
-                </button>
-              );
-            })}
+          {/* ── Título do modal ── */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-2">
+            <h2 className="text-xl font-bold text-gray-800">Registro de Estudo</h2>
           </div>
 
-          {/* Legenda */}
-          <div className="flex items-center gap-3 mt-3 flex-wrap text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Concluído</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" /> Parcial</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: BG_HEADER }} /> Hoje</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-200 inline-block" /> Futuro</span>
+          {/* ── Data: Hoje / Ontem / Outro ── */}
+          <div className="flex items-center gap-2 px-6 pb-4 pt-1">
+            <span className="text-gray-400 mr-1">
+              <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
+              </svg>
+            </span>
+            {(["hoje", "ontem", "outro"] as const).map(d => (
+              <button key={d} onClick={() => setDateMode(d)}
+                className="px-4 py-1 rounded text-sm font-semibold transition-colors"
+                style={dateMode === d
+                  ? { backgroundColor: BG, color: "#fff" }
+                  : { backgroundColor: "transparent", color: "#9CA3AF", border: "1px solid #E5E7EB" }}>
+                {d.toUpperCase()}
+              </button>
+            ))}
+            {dateMode === "outro" && (
+              <input type="date" value={otherDate} onChange={e => setOtherDate(e.target.value)}
+                className="ml-2 border border-gray-300 rounded px-2 py-1 text-sm" />
+            )}
           </div>
 
-          {/* Detalhe do dia selecionado */}
-          {selectedDayIdx !== null && (() => {
-            const selDay    = cycleDays[selectedDayIdx];
-            const selBlocks = blocks.filter(b => b.dayOfWeek === selDay);
-            const selStudied = historyByDay[selDay] ?? new Set();
-            // Sessões do dia selecionado (se for hoje, usa todaySessions)
-            const isToday   = selectedDayIdx === currentDayIdx;
+          <div className="px-6 pb-6 space-y-4">
 
-            return (
-              <div className="mt-4 border-t border-gray-100 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-bold text-gray-900">Dia {selectedDayIdx + 1} — Matérias</p>
-                  <button onClick={() => setSelectedDayIdx(null)} className="text-xs text-gray-400 hover:text-gray-600">Fechar ✕</button>
-                </div>
-                <div className="space-y-2">
-                  {selBlocks.map(b => {
-                    const name    = b.subjectName ?? subjects.find(s => s.id === b.subjectId)?.name ?? "—";
-                    const studied = b.subjectId ? (isToday ? studiedTodayIds.has(b.subjectId) : selStudied.has(b.subjectId)) : false;
-                    // Sessões desta matéria hoje (se for hoje)
-                    const matSessions = isToday
-                      ? todaySessions.filter(s => s.subjectId === b.subjectId)
-                      : [];
-                    return (
-                      <div key={b.id} className={`rounded-xl border px-4 py-3 ${studied ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">{name}</p>
-                            <p className="text-xs text-gray-500">{fmt(b.hours)} · {BLOCK_TYPE_LABEL[b.blockType] ?? b.blockType}</p>
-                          </div>
-                          {studied
-                            ? <span className="text-xs text-green-600 font-bold">✓ Feito</span>
-                            : <span className="text-xs text-gray-400">Pendente</span>}
-                        </div>
-                        {/* Métricas reduzidas se for hoje e tiver sessões */}
-                        {matSessions.length > 0 && (
-                          <div className="flex gap-4 mt-2 text-xs text-gray-600">
-                            <span>⏱ {matSessions.reduce((a,s) => a+s.hours,0).toFixed(1)}h</span>
-                            {matSessions.some(s => s.questions > 0) && (<>
-                              <span className="text-green-600">✓ {matSessions.reduce((a,s) => a+s.correct,0)}</span>
-                              <span className="text-red-500">✗ {matSessions.reduce((a,s) => a+s.wrong,0)}</span>
-                            </>)}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+            {/* ── Linha 1: CATEGORIA | DISCIPLINA | TEMPO DE ESTUDO ── */}
+            <div className="grid grid-cols-3 gap-6">
+              {/* Categoria */}
+              <div>
+                <label className={labelCls}>Categoria</label>
+                <div className="relative">
+                  <select value={category} onChange={e => setCategory(e.target.value)} className={selectBox}>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                  <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 </div>
               </div>
-            );
-          })()}
-        </div>
 
+              {/* Disciplina */}
+              <div>
+                <label className={labelCls}>Disciplina</label>
+                <div className="relative">
+                  <select value={subjectId} onChange={e => setSubjectId(e.target.value)} disabled={loading} className={selectBox}>
+                    <option value="">Selecione...</option>
+                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Tempo de estudo */}
+              <div>
+                <label className={labelCls}>Tempo de Estudo</label>
+                <input
+                  type="text"
+                  value={studyTime}
+                  onChange={e => setStudyTime(e.target.value)}
+                  placeholder="00:00:00"
+                  className="w-full border-b-2 border-teal-400 outline-none text-sm font-mono bg-transparent py-2 text-gray-800 focus:border-teal-600"
+                />
+              </div>
+            </div>
+
+            {/* ── Linha 2: TÓPICO | MATERIAL ── */}
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className={labelCls}>Tópico</label>
+                <div className="relative">
+                  <select value={topicId} onChange={e => setTopicId(e.target.value)} disabled={!subject} className={selectBox}>
+                    <option value="">Selecione...</option>
+                    {(subject?.topics ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>Material</label>
+                <input
+                  type="text"
+                  list="material-suggestions"
+                  value={material}
+                  onChange={e => setMaterial(e.target.value)}
+                  placeholder="Ex.: Aula 01"
+                  className="w-full border-b-2 border-teal-400 outline-none text-sm bg-transparent py-2 text-gray-800 focus:border-teal-600"
+                />
+                <datalist id="material-suggestions">
+                  {topic?.pdfs?.map((p: any) => <option key={p.id} value={p.title} />)}
+                  {!topic && subject?.topics?.flatMap((t: any) => t.pdfs ?? []).map((p: any) => <option key={p.id} value={p.title} />)}
+                </datalist>
+              </div>
+            </div>
+
+            {/* ── Checkboxes ── */}
+            <div className="space-y-2 pt-1">
+              {/* Teoria finalizada */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${theoryDone ? "border-teal-500 bg-teal-500" : "border-gray-300"}`}
+                  onClick={() => setTheoryDone(!theoryDone)}>
+                  {theoryDone && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                </span>
+                <input type="checkbox" checked={theoryDone} onChange={e => setTheoryDone(e.target.checked)} className="sr-only" />
+                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Teoria Finalizada</span>
+              </label>
+
+              {/* Programar revisões */}
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${scheduleReview ? "border-teal-500 bg-teal-500" : "border-gray-300"}`}
+                  onClick={() => setScheduleReview(!scheduleReview)}>
+                  {scheduleReview && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                </span>
+                <input type="checkbox" checked={scheduleReview} onChange={e => setScheduleReview(e.target.checked)} className="sr-only" />
+                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Programar Revisões</span>
+              </label>
+
+              {/* Tags de revisão */}
+              {scheduleReview && (
+                <div className="flex items-center gap-2 flex-wrap pl-6">
+                  {reviewTags.map(tag => (
+                    <span key={tag} className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full text-white"
+                      style={{ backgroundColor: BG }}>
+                      {tag}
+                      <button onClick={() => removeReviewTag(tag)} className="ml-0.5 hover:opacity-70">
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text" value={newReview} onChange={e => setNewReview(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && addReviewTag()}
+                      placeholder="ex: 60d"
+                      className="border-b border-gray-300 w-14 text-xs px-1 py-0.5 outline-none focus:border-teal-500"
+                    />
+                    <button onClick={addReviewTag}
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs"
+                      style={{ backgroundColor: BG }}>
+                      <Plus size={11} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ── 3 boxes: Questões | Páginas | Videoaulas ── */}
+            <div className="grid grid-cols-3 gap-4 pt-1">
+
+              {/* QUESTÕES */}
+              <div className="border border-gray-200 rounded-xl p-4" style={{ borderColor: "#e2f0ef" }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Questões</p>
+                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Acertos / Erros</p>
+                <div className="flex gap-3">
+                  <input type="number" min="0" value={correct} onChange={e => setCorrect(e.target.value)}
+                    className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
+                  <input type="number" min="0" value={wrong} onChange={e => setWrong(e.target.value)}
+                    className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
+                </div>
+              </div>
+
+              {/* PÁGINAS */}
+              <div className="border border-gray-200 rounded-xl p-4" style={{ borderColor: "#e2f0ef" }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Páginas</p>
+                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Início / Fim</p>
+                <div className="space-y-2">
+                  {pages.map((p, i) => (
+                    <div key={p.id} className="flex items-center gap-2">
+                      <input type="number" min="0" value={p.start} onChange={e => updatePage(p.id, "start", e.target.value)}
+                        className={`${inputCls} text-gray-800 border-gray-200 text-lg w-1/2 py-0.5`} />
+                      <input type="number" min="0" value={p.end} onChange={e => updatePage(p.id, "end", e.target.value)}
+                        className={`${inputCls} text-gray-800 border-gray-200 text-lg w-1/2 py-0.5`} />
+                      {pages.length > 1 && (
+                        <button onClick={() => removePage(p.id)} className="text-gray-300 hover:text-red-400 transition-colors">
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-center mt-3">
+                  <button onClick={addPage}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white transition-colors hover:opacity-80"
+                    style={{ backgroundColor: "#5eead4" }}>
+                    <Plus size={13} />
+                  </button>
+                </div>
+              </div>
+
+              {/* VIDEOAULAS */}
+              <div className="border border-gray-200 rounded-xl p-4" style={{ borderColor: "#e2f0ef" }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-3">Videoaulas</p>
+                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Título / Início / Fim</p>
+                <div className="space-y-2">
+                  {videos.map((v) => (
+                    <div key={v.id} className="flex items-center gap-1.5">
+                      <input type="text" value={v.title} onChange={e => updateVideo(v.id, "title", e.target.value)}
+                        className="flex-1 border-b border-gray-200 text-xs outline-none bg-transparent py-0.5 focus:border-teal-400 min-w-0" />
+                      <input type="text" value={v.start} onChange={e => updateVideo(v.id, "start", e.target.value)}
+                        placeholder="00:00:00"
+                        className="w-16 border-b border-gray-200 text-xs outline-none bg-transparent py-0.5 text-center focus:border-teal-400 font-mono" />
+                      <input type="text" value={v.end} onChange={e => updateVideo(v.id, "end", e.target.value)}
+                        placeholder="00:00:00"
+                        className="w-16 border-b border-gray-200 text-xs outline-none bg-transparent py-0.5 text-center focus:border-teal-400 font-mono" />
+                      {videos.length > 1 && (
+                        <button onClick={() => removeVideo(v.id)} className="text-gray-300 hover:text-red-400 transition-colors shrink-0">
+                          <X size={11} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-center mt-3">
+                  <button onClick={addVideo}
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white transition-colors hover:opacity-80"
+                    style={{ backgroundColor: "#5eead4" }}>
+                    <Plus size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Comentários ── */}
+            <div>
+              <label className={labelCls}>Comentários</label>
+              <textarea value={comment} onChange={e => setComment(e.target.value)}
+                rows={3} placeholder=""
+                className="w-full border-b-2 border-teal-200 outline-none text-sm bg-transparent py-1 text-gray-800 resize-none focus:border-teal-500 mt-1" />
+            </div>
+
+            {/* ── Feedbacks ── */}
+            {saved && (
+              <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-green-700 text-sm font-medium">
+                ✓ Sessão salva com sucesso!
+              </div>
+            )}
+            {error && (
+              <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-red-700 text-sm">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* ── Footer: Salvar e criar novo | Cancelar | Salvar ── */}
+            <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${saveAndNew ? "border-teal-500 bg-teal-500" : "border-gray-300"}`}
+                  onClick={() => setSaveAndNew(!saveAndNew)}>
+                  {saveAndNew && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                </span>
+                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Salvar e Criar Novo</span>
+              </label>
+
+              <div className="flex gap-3">
+                <button onClick={resetForm}
+                  className="px-5 py-2 rounded-lg text-sm font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={doSave} disabled={saving || !canSave}
+                  className="px-6 py-2 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-50 hover:opacity-90"
+                  style={{ backgroundColor: "#5eead4", color: BG }}>
+                  {saving ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
+      {showCelebration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center">
+            <div className="text-6xl mb-4">🎉</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Parabéns!</h2>
+            <p className="text-gray-500 text-sm mb-4">
+              Você concluiu todas as matérias previstas para hoje!
+            </p>
+            <div className="bg-gray-50 rounded-2xl px-5 py-4 mb-6 border border-gray-100">
+              <p className="text-gray-700 text-sm leading-relaxed italic">
+                &ldquo;{motivPhrase}&rdquo;
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCelebration(false)}
+              className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors"
+              style={{ backgroundColor: "#1B4040" }}>
+              Continuar estudando 💪
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+export default function SessaoPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: BG }} />
+      </div>
+    }>
+      <SessaoContent />
+    </Suspense>
   );
 }
