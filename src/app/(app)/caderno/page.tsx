@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { Plus, CheckCircle, XCircle, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Search, BarChart2, BookOpen, BookMarked } from "lucide-react";
 
-interface Subject { id: string; name: string; }
+interface SubjectTopic { id: string; name: string; pdfs: { title: string }[]; }
+interface Subject { id: string; name: string; topics?: SubjectTopic[]; }
 interface ErrorNote {
   id: string; title: string; description: string; topic: string | null;
   banca: string | null; difficulty: string; errorType: string | null;
@@ -666,15 +667,27 @@ export default function CadernoPage() {
                         autoComplete="off"
                       />
                       {topicFocused && subjectId && (() => {
-                        const subjectName = subjects.find(s => s.id === subjectId)?.name ?? "";
-                        const suggestions = [...new Set(
-                          notes
-                            .filter(n => n.subject.name === subjectName && n.topic && n.topic.toLowerCase().includes(topic.toLowerCase()))
-                            .map(n => n.topic!)
-                        )].slice(0, 8);
+                        const currentSubject = subjects.find(s => s.id === subjectId);
+                        const q = topic.toLowerCase();
+
+                        // 1. Tópicos cadastrados em Matérias (fonte principal)
+                        const fromMaterias: string[] = [];
+                        (currentSubject?.topics ?? []).forEach(t => {
+                          if (!q || t.name.toLowerCase().includes(q)) fromMaterias.push(t.name);
+                          t.pdfs.forEach(p => {
+                            if (!q || p.title.toLowerCase().includes(q)) fromMaterias.push(p.title);
+                          });
+                        });
+
+                        // 2. Tópicos de erros já registrados (complemento)
+                        const fromNotes = notes
+                          .filter(n => n.subject.id === subjectId && n.topic && n.topic.toLowerCase().includes(q))
+                          .map(n => n.topic!);
+
+                        const suggestions = [...new Set([...fromMaterias, ...fromNotes])].slice(0, 10);
                         if (!suggestions.length) return null;
                         return (
-                          <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          <ul className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
                             {suggestions.map(s => (
                               <li key={s}
                                 onMouseDown={() => { setTopic(s); setTopicFocused(false); }}
