@@ -63,9 +63,38 @@ function SessaoContent() {
 
   const [comment,      setComment]      = useState("");
   const [saveAndNew,   setSaveAndNew]   = useState(false);
-  const [saving,       setSaving]       = useState(false);
-  const [saved,        setSaved]        = useState(false);
-  const [error,        setError]        = useState("");
+  const [saving,          setSaving]          = useState(false);
+  const [saved,           setSaved]           = useState(false);
+  const [error,           setError]           = useState("");
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [motivPhrase,     setMotivPhrase]     = useState("");
+
+  const FRASES_MOTIVACIONAIS = [
+  "Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.",
+  "O tempo de estudo nunca é um tempo perdido.",
+  "Esse esforço todo vai sim valer a pena.",
+  "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.",
+  "A melhor forma de prever o futuro é criá-lo.",
+  "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.",
+  "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.",
+  "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!",
+  "Só o Papiro Liberta!",
+  "Comece de onde você está. Use o que você tiver. Faça o que você puder.",
+  "Para grandes resultados não existem atalhos.",
+  "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.",
+  "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.",
+  "Um gênio é 10% inspiração e 90% transpiração.",
+  "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.",
+  "É feliz quem sonha, mas só tem sucesso quem se dispõe a pagar o preço para transformar seu sonho em realidade.",
+  "Busque sempre o progresso, não a perfeição.",
+  "Tudo é possível se você se dedicar de cabeça e coração.",
+  "O que é bonito sobre a aprendizagem é que ninguém pode tirá-la de você.",
+  "Aquele que faz perguntas é um bobo por cinco minutos. Mas aquele que jamais questiona é um bobo para sempre.",
+  "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.",
+  "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.",
+  "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.",
+  "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não. Se você não der um passo à frente, estará sempre no mesmo lugar."
+];
 
   const subject  = subjects.find(s => s.id === subjectId);
   const topic    = subject?.topics.find(t => t.id === topicId);
@@ -189,6 +218,23 @@ function SessaoContent() {
       if (!res.ok) throw new Error(data.message ?? "Erro ao salvar.");
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+
+      // Verifica se concluiu todas as matérias do dia após salvar
+      try {
+        const schedRes = await fetch(
+          `/api/schedule?cycleDay=${localStorage.getItem("estudaai_cycle_day") ?? "0"}`
+        );
+        if (schedRes.ok) {
+          const sched = await schedRes.json();
+          // nextBlockType === null significa que todos os blocos do dia foram concluídos
+          if (sched.nextBlockType === null || (sched.todayBlocks ?? []).length === 0) {
+            const frase = FRASES_MOTIVACIONAIS[Math.floor(Math.random() * FRASES_MOTIVACIONAIS.length)];
+            setMotivPhrase(frase);
+            setShowCelebration(true);
+          }
+        }
+      } catch { /* não bloqueia o save se falhar */ }
+
       if (saveAndNew) resetForm();
     } catch (e: any) {
       setError(e.message);
@@ -484,6 +530,33 @@ function SessaoContent() {
         </div>
       </div>
     </div>
+
+      {/* ── Popup de celebração ── */}
+      {showCelebration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 text-center animate-bounce-in">
+            <div className="text-6xl mb-4">🎉</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+              Parabéns!
+            </h2>
+            <p className="text-gray-500 text-sm mb-4">
+              Você concluiu todas as matérias previstas para hoje!
+            </p>
+            <div className="bg-gray-50 rounded-2xl px-5 py-4 mb-6 border border-gray-100">
+              <p className="text-gray-700 text-sm leading-relaxed italic">
+                "{motivPhrase}"
+              </p>
+            </div>
+            <button
+              onClick={() => setShowCelebration(false)}
+              className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors"
+              style={{ backgroundColor: "#1B4040" }}>
+              Continuar estudando 💪
+            </button>
+          </div>
+        </div>
+      )}
   );
 }
 
