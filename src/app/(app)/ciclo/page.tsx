@@ -208,11 +208,12 @@ export default function CicloPage() {
         const sortedDates = Object.keys(dateToSubjects).sort().reverse();
         const hbd: Record<number, Set<string>> = {};
         const uniqueDays = [...new Set(mapped.map(b => b.dayOfWeek))].sort((a,b) => a-b);
+        const savedCycleIdx = parseInt(localStorage.getItem(CYCLE_KEY) ?? "0", 10);
 
         // Associa cada dia do ciclo ao dia de histórico correspondente
         // O dia atual (currentDayIdx) = hoje, dia anterior = ontem, etc.
         uniqueDays.forEach((dayOfWeek, idx) => {
-          const daysBack = (valid - idx + uniqueDays.length) % uniqueDays.length;
+          const daysBack = (savedCycleIdx - idx + uniqueDays.length) % uniqueDays.length;
           const dateForDay = sortedDates[daysBack];
           if (dateForDay) {
             hbd[dayOfWeek] = dateToSubjects[dateForDay] ?? new Set();
