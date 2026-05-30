@@ -35,7 +35,7 @@ export async function GET(req: Request) {
   const uid = session.user.id as string;
 
   const sessions = await prisma.studySession.findMany({
-    where:   { userId: uid }, // ← isolamento garantido
+    where:   { userId: uid },
     orderBy: { createdAt: "desc" },
     include: { subject: { select: { name: true } } },
   });
@@ -85,7 +85,7 @@ export async function PATCH(req: Request) {
   const uid = session.user.id as string;
 
   const body = await req.json();
-  const { id, category, topicName, pdfTitle, comment, hours, correct, wrong } = body;
+  const { id, category, topicName, pdfTitle, comment, hours, correct, wrong, studyDate } = body;
 
   // Verifica posse — só edita se for do usuário logado
   const existing = await prisma.studySession.findFirst({
@@ -107,6 +107,12 @@ export async function PATCH(req: Request) {
     updateData.questions = (Number(correct) || existing.correct) + (Number(wrong) || existing.wrong);
   }
 
+  // Edição de data: converte YYYY-MM-DD para DateTime UTC (meio-dia BRT = 15:00 UTC)
+  if (studyDate && typeof studyDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(studyDate)) {
+    const [y, m, d] = studyDate.split("-").map(Number);
+    updateData.createdAt = new Date(Date.UTC(y, m - 1, d, 15, 0, 0));
+  }
+
   const updated = await prisma.studySession.update({ where: { id }, data: updateData });
   return NextResponse.json(updated);
 }
@@ -120,17 +126,13 @@ export async function DELETE(req: Request) {
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ message: "ID obrigatório." }, { status: 400 });
 
-  // Verifica posse — só deleta se for do usuário logado
   const existing = await prisma.studySession.findFirst({
     where: { id, userId: uid },
   });
   if (!existing) return NextResponse.json({ message: "Sessão não encontrada." }, { status: 404 });
 
-  // Antes de deletar a sessão, tenta limpar reviews órfãs do pdfId associado
-  // (reviews criadas por sessões que foram deletadas ficam no banco indefinidamente)
   try {
     const meta = existing.notes ? JSON.parse(existing.notes) : {};
-    // Busca o pdfId pelo título armazenado no notes, se existir
     if (meta.pdfTitle && meta.pdfTitle.trim()) {
       const pdf = await prisma.pdf.findFirst({
         where: {
@@ -139,23 +141,15 @@ export async function DELETE(req: Request) {
         },
       });
       if (pdf) {
-        // Verifica se ainda há outras sessões ativas para este PDF
-        // Se não houver, remove as reviews pendentes órfãs
         const otherSessions = await prisma.studySession.count({
-          where: {
-            id:        { not: id },
-            userId:    uid,
-            subjectId: existing.subjectId,
-          },
+          where: { id: { not: id }, userId: uid, subjectId: existing.subjectId },
         });
         if (otherSessions === 0) {
-          await prisma.review.deleteMany({
-            where: { pdfId: pdf.id, completed: false },
-          });
+          await prisma.review.deleteMany({ where: { pdfId: pdf.id, completed: false } });
         }
       }
     }
-  } catch { /* ignora erros de limpeza — não impede o delete */ }
+  } catch { /* ignora erros de limpeza */ }
 
   await prisma.studySession.delete({ where: { id } });
   return NextResponse.json({ ok: true });
