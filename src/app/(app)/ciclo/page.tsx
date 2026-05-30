@@ -128,7 +128,39 @@ export default function CicloPage() {
       const savedIdx = cycleState?.currentDayIdx ?? 0;
       // Garante que o índice salvo no banco nunca ultrapassa o total de dias do ciclo
       const clampedIdx = Math.min(savedIdx, Math.max(0, days.length - 1));
-      const savedPendingFromDB: Block[] = cycleState?.pendingBlocks ?? [];
+      const rawPendingFromDB: Block[] = cycleState?.pendingBlocks ?? [];
+
+      // Monta contagem de sessões por matéria no histórico COMPLETO (todas as datas)
+      // Usada para limpar pendências que foram resolvidas com lançamento retroativo
+      const allSessionCountBySubject: Record<string, number> = {};
+      if (Array.isArray(hist)) {
+        (hist as any[]).forEach((dayGroup: any) => {
+          (dayGroup.sessions ?? []).forEach((s: any) => {
+            if (s.subjectId) {
+              allSessionCountBySubject[s.subjectId] = (allSessionCountBySubject[s.subjectId] ?? 0) + 1;
+            }
+          });
+        });
+      }
+
+      // Remove pendentes que já têm sessão registrada em qualquer data
+      const usedForPending: Record<string, number> = {};
+      const savedPendingFromDB: Block[] = rawPendingFromDB.filter(b => {
+        if (!b.subjectId) return true; // sem matéria: mantém
+        const available = allSessionCountBySubject[b.subjectId] ?? 0;
+        const used = usedForPending[b.subjectId] ?? 0;
+        if (used < available) {
+          usedForPending[b.subjectId] = used + 1;
+          return false; // já tem sessão → remove da pendência
+        }
+        return true; // sem sessão suficiente → mantém como pendente
+      });
+
+      // Se a limpeza removeu algum bloco, persiste no banco imediatamente
+      if (savedPendingFromDB.length !== rawPendingFromDB.length) {
+        const currentIdx = Math.min(cycleState?.currentDayIdx ?? 0, Math.max(0, getCycleDays(mapped).length - 1));
+        saveCycleState(currentIdx, savedPendingFromDB, cycleState?.lastDate ?? toBRDate(new Date()));
+      }
 
       // Monta mapa de data → sessões com HISTÓRICO COMPLETO (sem filtro de semana)
       const dtSess: Record<string, HistSession[]> = {};
