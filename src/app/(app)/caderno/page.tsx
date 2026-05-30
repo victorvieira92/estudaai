@@ -8,6 +8,7 @@ interface ErrorNote {
   id: string; title: string; description: string; topic: string | null;
   banca: string | null; difficulty: string; errorType: string | null;
   resolved: boolean; reviewCount: number; wrongCount: number;
+  pending: boolean; nextReviewAt: string | null; intervalDays: number;
   createdAt: string;
   subject: { name: string }; subjectId: string;
 }
@@ -229,7 +230,7 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
               const c = subNotes.filter(n => n.errorType === et.value).length;
               return c > best.count ? { label: et.label, emoji: et.emoji, count: c } : best;
             }, { label: "", emoji: "", count: 0 });
-            const pendingCritical = subNotes.filter(n => !n.resolved && n.difficulty === "Alta").length;
+            const pendingCritical = subNotes.filter(n => n.pending && n.difficulty === "Alta").length;
 
             return (
               <div key={s.name} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
@@ -376,7 +377,7 @@ export default function CadernoPage() {
     fetch("/api/subjects").then(r=>r.json()).then(d=>setSubjects(Array.isArray(d)?d:(d.subjects??[]))).catch(console.error);
   },[]);
 
-  const filtered = useMemo(()=>notes.filter(n=>filter==="all"?true:filter==="pending"?!n.resolved:n.resolved),[notes,filter]);
+  const filtered = useMemo(()=>notes.filter(n=>filter==="all"?true:filter==="pending"?n.pending:!n.pending),[notes,filter]);
 
   const grouped = useMemo(()=>{
     const out: Record<string,{name:string;topics:Record<string,ErrorNote[]>;noTopic:ErrorNote[]}> = {};
@@ -397,15 +398,15 @@ export default function CadernoPage() {
   // Métricas
   const metrics = useMemo(()=>{
     const total = notes.length;
-    const resolved = notes.filter(n=>n.resolved).length;
-    const pending = notes.filter(n=>!n.resolved).length;
-    const critical = notes.filter(n=>!n.resolved&&n.difficulty==="Alta").length;
+    const resolved = notes.filter(n=>!n.pending).length;
+    const pending = notes.filter(n=>n.pending).length;
+    const critical = notes.filter(n=>n.pending&&n.difficulty==="Alta").length;
     const totalReviews = notes.reduce((a,n)=>a+n.reviewCount,0);
     const totalWrong = notes.reduce((a,n)=>a+n.wrongCount,0);
     const taxaAcerto = totalReviews>0 ? Math.round(((totalReviews-totalWrong)/totalReviews)*100) : 0;
     const bySubject = Object.entries(grouped).map(([name,data])=>{
       const all = [...data.noTopic,...Object.values(data.topics).flat()];
-      const r = all.filter(n=>n.resolved).length;
+      const r = all.filter(n=>!n.pending).length;
       return { name, total:all.length, resolved:r, pending:all.length-r, taxaAcerto: all.reduce((a,n)=>a+n.reviewCount,0)>0?Math.round(((all.reduce((a,n)=>a+n.reviewCount,0)-all.reduce((a,n)=>a+n.wrongCount,0))/all.reduce((a,n)=>a+n.reviewCount,0))*100):0 };
     });
     return { total, resolved, pending, critical, totalReviews, taxaAcerto, bySubject };
@@ -444,7 +445,7 @@ export default function CadernoPage() {
   const NoteCard = ({n}:{n:ErrorNote})=>{
     const et = etLabel(n.errorType);
     return (
-      <div className={`bg-white rounded-2xl border p-5 ${n.resolved?"border-green-200 opacity-70":"border-gray-200"}`}>
+      <div className={`bg-white rounded-2xl border p-5 ${!n.pending?"border-green-200 opacity-70":"border-gray-200"}`}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
@@ -455,14 +456,21 @@ export default function CadernoPage() {
             </div>
             <div className="font-semibold text-gray-900 mb-2 leading-snug" dangerouslySetInnerHTML={{__html:n.title}}/>
             {n.description&&<div className="text-sm text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{__html:n.description}}/>}
-            <p className="text-xs text-gray-400 mt-2">Revisões: {n.reviewCount} · Errou de novo: {n.wrongCount}x</p>
+            <p className="text-xs text-gray-400 mt-2">
+              Acertos: {n.reviewCount - n.wrongCount} · Erros: {n.wrongCount}x
+              {!n.pending && n.nextReviewAt && (
+                <span className="ml-2 text-teal-600 font-medium">
+                  · volta em {new Date(n.nextReviewAt).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}
+                  {n.intervalDays >= 90 ? " (dominado 🎯)" : n.intervalDays >= 30 ? " (+30d)" : n.intervalDays >= 7 ? " (+7d)" : " (+1d)"}
+                </span>
+              )}
+            </p>
           </div>
           <div className="flex flex-col gap-2 shrink-0 items-end">
-            {!n.resolved&&(
+            {n.pending&&(
               <div className="flex gap-1.5">
-                <button onClick={()=>action(n.id,"wrong")} title="Errei de novo" className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors"><XCircle className="w-4 h-4"/></button>
-                <button onClick={()=>action(n.id,"review")} className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors">Revisei</button>
-                <button onClick={()=>action(n.id,"resolve")} title="Resolvido" className="p-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors"><CheckCircle className="w-4 h-4"/></button>
+                <button onClick={()=>action(n.id,"wrong")} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"><XCircle className="w-4 h-4"/> Errei</button>
+                <button onClick={()=>action(n.id,"correct")} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg text-xs font-medium transition-colors"><CheckCircle className="w-4 h-4"/> Acertei</button>
               </div>
             )}
             <div className="flex gap-1.5">
