@@ -33,7 +33,6 @@ interface Topic   { id: string; name: string; }
 const BG = "#1B4040";
 const CATEGORIES = ["Teoria", "Exercícios", "Revisão", "Leitura de Lei", "Videoaula"];
 
-// Badge de categoria — cores da imagem 2
 function CategoryBadge({ cat }: { cat: string }) {
   const map: Record<string, { bg: string; label: string }> = {
     "Exercícios":     { bg: "#22c55e", label: "QUESTÕES"       },
@@ -51,7 +50,6 @@ function CategoryBadge({ cat }: { cat: string }) {
   );
 }
 
-// Cores laterais por disciplina
 const PALETTE = ["#1B4040","#3B82F6","#10B981","#F59E0B","#8B5CF6","#EC4899","#14B8A6","#EF4444"];
 const colorCache = new Map<string, string>(); let colorIdx = 0;
 function getColor(id: string) {
@@ -66,19 +64,24 @@ function fmtH(h: number) {
   return mm > 0 ? `${hh}h${String(mm).padStart(2, "0")}min` : `${hh}h`;
 }
 
-// HH:MM:SS → horas decimais
 function timeToHours(t: string): number {
   const [h, m, s] = t.split(":").map(Number);
   return (h || 0) + (m || 0) / 60 + (s || 0) / 3600;
 }
 
-// horas decimais → HH:MM:SS
 function hoursToTime(h: number): string {
   const total = Math.round(h * 3600);
   const hh = Math.floor(total / 3600);
   const mm = Math.floor((total % 3600) / 60);
   const ss = total % 60;
   return `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+}
+
+// Extrai YYYY-MM-DD de um createdAt (respeitando BRT = UTC-3)
+function toBRDate(isoStr: string): string {
+  const d = new Date(isoStr);
+  const br = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return br.toISOString().slice(0, 10);
 }
 
 function parseDateLabel(ds: string) {
@@ -102,7 +105,7 @@ function EditPanel({
 }: {
   session: Session;
   subjects: Subject[];
-  onSave: (data: Partial<Session> & { studyTime: string }) => void;
+  onSave: (data: Partial<Session> & { studyTime: string; studyDate: string }) => void;
   onCancel: () => void;
   saving: boolean;
 }) {
@@ -113,8 +116,9 @@ function EditPanel({
   const [topicName, setTopicName] = useState(session.topicName);
   const [pdfTitle,  setPdfTitle]  = useState(session.pdfTitle);
   const [comment,   setComment]   = useState(session.comment);
+  // Data editável — inicializa com a data atual da sessão (BRT)
+  const [studyDate, setStudyDate] = useState(toBRDate(session.createdAt));
 
-  // Tópicos da disciplina (já sabemos o subjectId, puxamos da lista)
   const subject = subjects.find(s => s.id === session.subjectId);
   const topics  = subject?.topics ?? [];
 
@@ -143,7 +147,21 @@ function EditPanel({
             className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:border-teal-400" />
         </div>
 
-        {/* Tópico — dropdown se tiver tópicos, input livre caso contrário */}
+        {/* Data do estudo — NOVO */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Data do estudo</label>
+          <input
+            type="date"
+            value={studyDate}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={e => setStudyDate(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        {/* Tópico */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Tópico</label>
           {topics.length > 0 ? (
@@ -161,9 +179,7 @@ function EditPanel({
               className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400" />
           )}
         </div>
-      </div>
 
-      <div className="grid grid-cols-3 gap-3">
         {/* Acertos */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Acertos</label>
@@ -177,7 +193,9 @@ function EditPanel({
           <input type="number" min="0" value={wrong} onChange={e => setWrong(e.target.value)}
             className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400 text-red-500 font-bold" />
         </div>
+      </div>
 
+      <div className="grid grid-cols-2 gap-3">
         {/* Material/PDF */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Material</label>
@@ -185,14 +203,14 @@ function EditPanel({
             placeholder="Ex.: Aula 01"
             className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400" />
         </div>
-      </div>
 
-      {/* Comentário */}
-      <div>
-        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Comentário</label>
-        <input type="text" value={comment} onChange={e => setComment(e.target.value)}
-          placeholder="Observação sobre a sessão..."
-          className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400" />
+        {/* Comentário */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Comentário</label>
+          <input type="text" value={comment} onChange={e => setComment(e.target.value)}
+            placeholder="Observação sobre a sessão..."
+            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400" />
+        </div>
       </div>
 
       <div className="flex gap-2 justify-end pt-1">
@@ -200,7 +218,8 @@ function EditPanel({
           className="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg transition-colors">
           Cancelar
         </button>
-        <button onClick={() => onSave({ category, studyTime, correct: parseInt(correct)||0, wrong: parseInt(wrong)||0, topicName, pdfTitle, comment })}
+        <button
+          onClick={() => onSave({ category, studyTime, studyDate, correct: parseInt(correct)||0, wrong: parseInt(wrong)||0, topicName, pdfTitle, comment })}
           disabled={saving}
           className="px-4 py-1.5 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
           style={{ backgroundColor: BG }}>
@@ -234,7 +253,6 @@ export default function HistoricoPage() {
 
   useEffect(() => {
     load();
-    // Carrega lista de disciplinas para o painel de edição
     fetch("/api/subjects")
       .then(r => r.json())
       .then(d => {
@@ -255,7 +273,7 @@ export default function HistoricoPage() {
     setSaving(false); setCommentId(null); load();
   };
 
-  const saveEdit = async (id: string, data: Partial<Session> & { studyTime: string }) => {
+  const saveEdit = async (id: string, data: Partial<Session> & { studyTime: string; studyDate: string }) => {
     setSaving(true);
     const hours = timeToHours(data.studyTime);
     await fetch("/api/historico", {
@@ -270,6 +288,7 @@ export default function HistoricoPage() {
         hours,
         correct:   data.correct,
         wrong:     data.wrong,
+        studyDate: data.studyDate, // ← data editada
       }),
     });
     setSaving(false); setEditId(null); load();
@@ -282,20 +301,17 @@ export default function HistoricoPage() {
     setSaving(false); setDeleteId(null); load();
   };
 
-  // KPIs
   const totalHours     = data.reduce((a, g) => a + g.totalHours, 0);
   const totalQuestions = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.questions, a), 0);
   const totalCorrect   = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.correct, a), 0);
   const totalWrong     = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.wrong, a), 0);
   const globalAccuracy = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null;
 
-  // Encontra a sessão para o EditPanel
   const allSessions = data.flatMap(g => g.sessions);
   const editSession = allSessions.find(s => s.id === editId) ?? null;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <div className="text-white px-8"
         style={{ backgroundColor: BG, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         <h1 className="text-3xl font-bold">Histórico</h1>
@@ -340,7 +356,6 @@ export default function HistoricoPage() {
               const { day, dayOfWeek, month, isToday } = parseDateLabel(group.date);
               return (
                 <div key={group.date}>
-                  {/* Cabeçalho do dia */}
                   <div className="flex items-center gap-4 mb-3">
                     <div className="flex items-baseline gap-2 shrink-0">
                       <span className="text-3xl font-bold text-gray-800">{day}</span>
@@ -360,42 +375,30 @@ export default function HistoricoPage() {
                     </div>
                   </div>
 
-                  {/* Sessões */}
                   <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                     {group.sessions.map((s, si) => (
                       <div key={s.id}>
-                        {/* ── Linha da sessão ── */}
                         <div className={`flex items-stretch ${si < group.sessions.length - 1 ? "border-b border-gray-100" : ""} hover:bg-gray-50 transition-colors`}>
-
-                          {/* Barra colorida lateral */}
                           <div className="w-1 shrink-0" style={{ backgroundColor: getColor(s.subjectId) }} />
 
                           <div className="flex flex-1 items-center gap-4 px-5 py-3 min-w-0">
-
-                            {/* Info principal — nome + tópico */}
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-gray-900 text-sm uppercase tracking-wide">{s.subjectName}</p>
-
-                              {/* Tópico (linha truncada igual imagem 2) */}
                               {(s.topicName || s.pdfTitle) && (
                                 <p className="text-xs text-gray-500 mt-0.5 truncate">
                                   {[s.topicName, s.pdfTitle].filter(Boolean).join(" · ")}
                                 </p>
                               )}
-
-                              {/* Comentário se existir */}
                               {s.comment && (
                                 <p className="text-xs text-gray-400 mt-0.5 italic truncate">💬 {s.comment}</p>
                               )}
                             </div>
 
-                            {/* Tempo */}
                             <div className="flex items-center gap-1.5 shrink-0 text-gray-500 text-sm">
                               <Clock size={13} />
                               <span className="font-mono tabular-nums">{s.hoursFormatted}</span>
                             </div>
 
-                            {/* Acertos / Erros */}
                             {s.questions > 0 && (
                               <div className="flex items-center gap-2 shrink-0">
                                 <span className="text-sm font-bold text-green-500">{s.correct}</span>
@@ -403,7 +406,6 @@ export default function HistoricoPage() {
                               </div>
                             )}
 
-                            {/* % badge */}
                             {s.accuracy !== null && s.questions > 0 && (
                               <span className="text-xs font-bold px-2.5 py-1 rounded-full text-white shrink-0 tabular-nums"
                                 style={{
@@ -414,10 +416,8 @@ export default function HistoricoPage() {
                               </span>
                             )}
 
-                            {/* Categoria badge */}
                             <CategoryBadge cat={s.category || "Teoria"} />
 
-                            {/* Botões ação */}
                             <div className="flex items-center gap-0.5 shrink-0">
                               <button
                                 onClick={() => { setCommentId(s.id); setCommentText(s.comment); setEditId(null); setDeleteId(null); }}
@@ -441,7 +441,6 @@ export default function HistoricoPage() {
                           </div>
                         </div>
 
-                        {/* ── Painel de observação (balão) ── */}
                         {commentId === s.id && (
                           <div className="px-5 py-3 bg-blue-50 border-t border-blue-100 flex items-center gap-2">
                             <MessageSquare size={14} className="text-blue-400 shrink-0" />
@@ -464,7 +463,6 @@ export default function HistoricoPage() {
                           </div>
                         )}
 
-                        {/* ── Painel de edição completa (lápis) ── */}
                         {editId === s.id && editSession && (
                           <EditPanel
                             session={editSession}
@@ -475,7 +473,6 @@ export default function HistoricoPage() {
                           />
                         )}
 
-                        {/* ── Confirmação de exclusão ── */}
                         {deleteId === s.id && (
                           <div className="px-5 py-3 bg-red-50 border-t border-red-100 flex items-center justify-between">
                             <p className="text-sm text-red-700 font-medium">Confirmar exclusão desta sessão?</p>
