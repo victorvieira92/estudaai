@@ -129,39 +129,42 @@ export default function CicloPage() {
 
   // ── Carrega dados ────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
-    const [blRes, histRes, stateRes] = await Promise.all([
-      fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
-      fetch("/api/historico").then(r => r.json()).catch(() => []),
-      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({})),
-    ]);
+    try {
+      const [blRes, histRes, stateRes] = await Promise.all([
+        fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
+        fetch("/api/historico").then(r => r.json()).catch(() => []),
+        fetch("/api/cycle-state").then(r => r.json()).catch(() => ({})),
+      ]);
 
-    const mapped: Block[] = Array.isArray(blRes) ? blRes.map((b: any) => ({
-      id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
-      blockType: b.blockType, subjectId: b.subjectId ?? null,
-      subjectName: b.subject?.name ?? null,
-    })) : [];
-    setBlocks(mapped);
+      const mapped: Block[] = Array.isArray(blRes) ? blRes.map((b: any) => ({
+        id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
+        blockType: b.blockType, subjectId: b.subjectId ?? null,
+        subjectName: b.subject?.name ?? null,
+      })) : [];
+      setBlocks(mapped);
 
-    // Monta mapa data → sessões
-    const dtSess: Record<string, HistSession[]> = {};
-    if (Array.isArray(histRes)) {
-      histRes.forEach((g: any) => {
-        dtSess[g.date] = (g.sessions ?? []).map((s: any) => ({
-          subjectId: s.subjectId, hours: s.hours ?? 0,
-          questions: s.questions ?? 0, correct: s.correct ?? 0,
-          wrong: s.wrong ?? 0, createdAt: s.createdAt ?? "",
-        }));
-      });
+      const dtSess: Record<string, HistSession[]> = {};
+      if (Array.isArray(histRes)) {
+        histRes.forEach((g: any) => {
+          dtSess[g.date] = (g.sessions ?? []).map((s: any) => ({
+            subjectId: s.subjectId, hours: s.hours ?? 0,
+            questions: s.questions ?? 0, correct: s.correct ?? 0,
+            wrong: s.wrong ?? 0, createdAt: s.createdAt ?? "",
+          }));
+        });
+      }
+      setDateToSessions(dtSess);
+
+      const savedDayStates: Record<string, DayState> = stateRes?.dayStates ?? {};
+      setDateToDayState(savedDayStates);
+
+      const today = toBRDate(new Date());
+      setViewWeek(getMondayOfWeek(today));
+    } catch (e) {
+      console.error("Erro ao carregar ciclo:", e);
+    } finally {
+      setLoading(false);
     }
-    setDateToSessions(dtSess);
-
-    // Restaura marcações manuais salvas no banco
-    const savedDayStates: Record<string, DayState> = stateRes?.dayStates ?? {};
-    setDateToDayState(savedDayStates);
-
-    // Semana atual
-    const today = toBRDate(new Date());
-    setViewWeek(getMondayOfWeek(today));
   }, []);
 
   useEffect(() => { load(); }, [load]);
