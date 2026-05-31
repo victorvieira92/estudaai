@@ -101,11 +101,11 @@ export default function CicloPage() {
   const [cycleAdvancedAt, setCycleAdvancedAt] = useState<string>(""); // ISO timestamp do último avanço manual
 
   // Salva estado do ciclo no banco
-  const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string, advancedAt?: string) => {
+  const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string, advancedAt?: string, donIds?: string[]) => {
     fetch("/api/cycle-state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentDayIdx: dayIdx, pendingBlocks: pending, lastDate, advancedAt: advancedAt ?? null }),
+      body: JSON.stringify({ currentDayIdx: dayIdx, pendingBlocks: pending, lastDate, advancedAt: advancedAt ?? null, manualDoneIds: donIds ?? [] }),
     }).catch(console.error);
   };
 
@@ -152,6 +152,14 @@ export default function CicloPage() {
       // Lê o timestamp do último avanço manual (gravado no banco via campo advancedAt)
       const advancedAtFromDB: string = cycleState?.advancedAt ?? "";
       if (advancedAtFromDB) setCycleAdvancedAt(advancedAtFromDB);
+
+      // Restaura marcações manuais salvas no banco
+      const savedManualDoneIds: string[] = cycleState?.manualDoneIds ?? [];
+      if (savedManualDoneIds.length > 0) {
+        const manualMap: Record<string, boolean> = {};
+        savedManualDoneIds.forEach((id: string) => { manualMap[id] = true; });
+        setManualDone(manualMap);
+      }
 
       const savedPendingFromDB: Block[] = rawPendingFromDB.filter(b => {
         if (!b.subjectId) return true; // sem matéria: mantém
@@ -371,18 +379,25 @@ export default function CicloPage() {
   const doneCount  = Object.keys(blockDoneMap).length;
   const totalCount = allToday.length;
 
-  const toggleManual = (id: string) =>
-    setManualDone(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleManual = (id: string) => {
+    setManualDone(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      // Persiste imediatamente no banco para sobreviver a recarregamentos
+      const doneIds = Object.keys(next).filter(k => next[k]);
+      saveCycleState(currentDayIdx, pendingBlocks, toBRDate(new Date()), cycleAdvancedAt, doneIds);
+      return next;
+    });
+  };
 
   const concludeDay = () => {
     setCompleting(true);
+    // Bloco concluído = tem sessão registrada OU foi marcado manualmente
     const undone    = allToday.filter(b => !isDone(b));
     const nextIdx   = (currentDayIdx + 1) % cycleDays.length;
     const todayDS   = toBRDate(new Date());
-    const advancedAt = new Date().toISOString(); // timestamp exato do avanço
+    const advancedAt = new Date().toISOString();
     saveCycleState(nextIdx, undone, todayDS, advancedAt);
     setCycleAdvancedAt(advancedAt);
-    // Detecta volta ao início do ciclo (ciclo completo)
     const completedCycle = nextIdx === 0 || nextIdx < currentDayIdx;
     if (completedCycle) {
       setCelebrationDay(currentDayIdx + 1);

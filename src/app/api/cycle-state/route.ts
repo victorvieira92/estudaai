@@ -30,11 +30,15 @@ export async function GET() {
     pendingBlocks = [];
   }
 
+  // manualDoneIds também fica dentro do wrapper JSON
+  const manualDoneIds: string[] = Array.isArray(parsed?.manualDoneIds) ? parsed.manualDoneIds : [];
+
   return NextResponse.json({
     currentDayIdx: state.currentDayIdx,
     pendingBlocks,
-    lastDate:   state.lastDate ?? "",
+    lastDate:      state.lastDate ?? "",
     advancedAt,
+    manualDoneIds,
   });
 }
 
@@ -44,12 +48,14 @@ export async function POST(req: Request) {
   const uid = session.user.id as string;
 
   const body = await req.json();
-  const { currentDayIdx, pendingBlocks, lastDate, advancedAt } = body;
 
   // Salva pendingBlocks + advancedAt juntos no campo JSON
+  const { currentDayIdx, pendingBlocks, lastDate, advancedAt, manualDoneIds } = body;
+
   const pendingPayload = JSON.stringify({
-    blocks:     pendingBlocks ?? [],
-    advancedAt: advancedAt ?? "",
+    blocks:        pendingBlocks ?? [],
+    advancedAt:    advancedAt ?? "",
+    manualDoneIds: manualDoneIds ?? [],
   });
 
   await prisma.userCycleState.upsert({
