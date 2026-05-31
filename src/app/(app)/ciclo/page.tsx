@@ -624,11 +624,13 @@ export default function CicloPage() {
                 <div className="space-y-2">
                   {selBlocks.map(b => {
                     const name = b.subjectName ?? subjects.find(s => s.id === b.subjectId)?.name ?? "—";
-                    let studied = false;
+                    let studiedAuto = false;
                     if (b.subjectId) {
                       const avail = sc2[b.subjectId]??0; const u = used3[b.subjectId]??0;
-                      if (u < avail) { studied=true; used3[b.subjectId]=u+1; }
+                      if (u < avail) { studiedAuto=true; used3[b.subjectId]=u+1; }
                     }
+                    const studiedManual = !!manualDone[b.id];
+                    const studied = studiedAuto || studiedManual;
                     const matSess = selSess.filter(s => s.subjectId === b.subjectId);
                     return (
                       <div key={b.id} className={`rounded-xl border px-4 py-3 ${studied?"bg-green-50 border-green-200":"bg-gray-50 border-gray-200"}`}>
@@ -637,8 +639,19 @@ export default function CicloPage() {
                             <p className="text-sm font-semibold text-gray-900">{name}</p>
                             <p className="text-xs text-gray-500">{fmt(b.hours)} · {BLOCK_LABEL[b.blockType]??b.blockType}</p>
                           </div>
-                          {studied ? <span className="text-xs text-green-600 font-bold">✓ Feito</span>
-                                   : <span className="text-xs text-gray-400">Pendente</span>}
+                          <div className="flex items-center gap-2">
+                            {studied
+                              ? <span className="text-xs text-green-600 font-bold">✓ Feito</span>
+                              : <span className="text-xs text-gray-400">Pendente</span>}
+                            {!studiedAuto && (
+                              <button
+                                onClick={() => toggleManual(b.id)}
+                                title={studiedManual ? "Desmarcar" : "Marcar como feito"}
+                                className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-colors ${studiedManual ? "bg-green-500 border-green-500 text-white" : "border-gray-300 hover:border-green-400"}`}>
+                                {studiedManual && <CheckCircle className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {matSess.length > 0 && (
                           <div className="flex gap-4 mt-2 text-xs text-gray-600">
