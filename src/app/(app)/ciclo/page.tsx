@@ -164,10 +164,12 @@ export default function CicloPage() {
         return true; // sem sessão suficiente → mantém como pendente
       });
 
-      // Se a limpeza removeu algum bloco, persiste no banco imediatamente
+      // Se a limpeza removeu algum bloco, persiste no banco — preservando o advancedAt
       if (savedPendingFromDB.length !== rawPendingFromDB.length) {
         const currentIdx = Math.min(cycleState?.currentDayIdx ?? 0, Math.max(0, getCycleDays(mapped).length - 1));
-        saveCycleState(currentIdx, savedPendingFromDB, cycleState?.lastDate ?? toBRDate(new Date()), advancedAtFromDB);
+        // Só salva se advancedAt já está no banco (para não sobrescrever fix manual)
+        // ou se não existe advancedAt (nunca houve avanço)
+        saveCycleState(currentIdx, savedPendingFromDB, cycleState?.lastDate ?? toBRDate(new Date()), advancedAtFromDB || undefined);
       }
 
       // Monta mapa de data → sessões com HISTÓRICO COMPLETO (sem filtro de semana)
@@ -230,13 +232,14 @@ export default function CicloPage() {
         setCurrentDayIdx(nextIdx);
         setPendingBlocks(allPending);
       } else {
-        // Mesmo dispositivo, mesmo dia: apenas usa o que veio do banco
+        // Mesmo dispositivo, mesmo dia: apenas usa o que veio do banco, sem salvar
         setCurrentDayIdx(clampedIdx);
         setPendingBlocks(savedPendingFromDB);
-        // Atualiza lastDate se o banco estava sem data (primeiro acesso)
+        // Só salva se for o primeiro acesso (sem lastDate) — preserva advancedAt existente
         if (!lastDate) {
           saveCycleState(clampedIdx, savedPendingFromDB, todayDS, advancedAtFromDB || undefined);
         }
+        // Se lastDate já existe e é hoje: NÃO salva — evita sobrescrever advancedAt do banco
       }
     }).finally(() => setLoading(false));
   }, []);
