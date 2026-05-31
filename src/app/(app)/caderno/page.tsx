@@ -344,6 +344,8 @@ export default function CadernoPage() {
   const [notes, setNotes] = useState<ErrorNote[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [filter, setFilter] = useState<"pending"|"all"|"resolved">("pending");
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+  const reveal = (id: string) => setRevealedIds(prev => new Set([...prev, id]));
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
@@ -444,41 +446,62 @@ export default function CadernoPage() {
 
   const NoteCard = ({n}:{n:ErrorNote})=>{
     const et = etLabel(n.errorType);
+    const isRevealed = revealedIds.has(n.id);
     return (
-      <div className={`bg-white rounded-2xl border p-5 ${!n.pending?"border-green-200 opacity-70":"border-gray-200"}`}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${n.difficulty==="Alta"?"bg-red-100 text-red-700":n.difficulty==="Media"?"bg-yellow-100 text-yellow-700":"bg-green-100 text-green-700"}`}>{n.difficulty}</span>
-              {et&&<span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{et.emoji} {et.label}</span>}
-              {n.banca&&<span className="text-xs text-gray-400">• {n.banca}</span>}
-              <span className="text-xs text-gray-400">{fmtDate(n.createdAt)}</span>
-            </div>
-            <div className="font-semibold text-gray-900 mb-2 leading-snug" dangerouslySetInnerHTML={{__html:n.title}}/>
-            {n.description&&<div className="text-sm text-gray-600 leading-relaxed" dangerouslySetInnerHTML={{__html:n.description}}/>}
-            <p className="text-xs text-gray-400 mt-2">
-              Acertos: {n.reviewCount - n.wrongCount} · Erros: {n.wrongCount}x
-              {!n.pending && n.nextReviewAt && (
-                <span className="ml-2 text-teal-600 font-medium">
-                  · volta em {new Date(n.nextReviewAt).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}
-                  {n.intervalDays >= 90 ? " (dominado 🎯)" : n.intervalDays >= 30 ? " (+30d)" : n.intervalDays >= 7 ? " (+7d)" : " (+1d)"}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex flex-col gap-2 shrink-0 items-end">
-            {n.pending&&(
-              <div className="flex gap-1.5">
-                <button onClick={()=>action(n.id,"wrong")} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"><XCircle className="w-4 h-4"/> Errei</button>
-                <button onClick={()=>action(n.id,"correct")} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg text-xs font-medium transition-colors"><CheckCircle className="w-4 h-4"/> Acertei</button>
+      <div className={`bg-white rounded-2xl border overflow-hidden ${!n.pending?"border-green-200 opacity-70":"border-gray-200"}`}>
+        {/* Pergunta — sempre visível */}
+        <div className="p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${n.difficulty==="Alta"?"bg-red-100 text-red-700":n.difficulty==="Media"?"bg-yellow-100 text-yellow-700":"bg-green-100 text-green-700"}`}>{n.difficulty}</span>
+                {et&&<span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{et.emoji} {et.label}</span>}
+                {n.banca&&<span className="text-xs text-gray-400">• {n.banca}</span>}
+                <span className="text-xs text-gray-400">{fmtDate(n.createdAt)}</span>
               </div>
-            )}
-            <div className="flex gap-1.5">
+              <div className="font-semibold text-gray-900 leading-snug" dangerouslySetInnerHTML={{__html:n.title}}/>
+            </div>
+            <div className="flex gap-1.5 shrink-0">
               <button onClick={()=>startEdit(n)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
               <button onClick={()=>deleteNote(n.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
             </div>
           </div>
+
+          {/* Botão revelar — só aparece se ainda não revelou e tem pendente */}
+          {n.pending && !isRevealed && (
+            <button
+              onClick={() => reveal(n.id)}
+              className="mt-4 w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all font-medium">
+              👁 Ver resposta
+            </button>
+          )}
         </div>
+
+        {/* Resposta — revelada ao clicar */}
+        {(isRevealed || !n.pending) && (
+          <div className={`border-t px-5 py-4 ${n.pending ? "bg-gray-50 border-gray-100" : "bg-green-50 border-green-100"}`}>
+            {n.description && (
+              <div className="text-sm text-gray-700 leading-relaxed mb-3" dangerouslySetInnerHTML={{__html:n.description}}/>
+            )}
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-xs text-gray-400">
+                Acertos: {n.reviewCount - n.wrongCount} · Erros: {n.wrongCount}x
+                {!n.pending && n.nextReviewAt && (
+                  <span className="ml-2 text-teal-600 font-medium">
+                    · volta em {new Date(n.nextReviewAt).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})}
+                    {n.intervalDays >= 90 ? " (dominado 🎯)" : n.intervalDays >= 30 ? " (+30d)" : n.intervalDays >= 7 ? " (+7d)" : " (+1d)"}
+                  </span>
+                )}
+              </p>
+              {n.pending && (
+                <div className="flex gap-1.5">
+                  <button onClick={()=>action(n.id,"wrong")} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-medium transition-colors"><XCircle className="w-4 h-4"/> Errei</button>
+                  <button onClick={()=>action(n.id,"correct")} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 rounded-lg text-xs font-medium transition-colors"><CheckCircle className="w-4 h-4"/> Acertei</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
