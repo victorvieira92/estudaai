@@ -14,7 +14,7 @@ export async function GET() {
   if (!state) return NextResponse.json({ error: "Nenhum estado encontrado." }, { status: 404 });
 
   // 21h00 BRT = 00h00 UTC do dia seguinte (BRT = UTC-3)
-  const advancedAt = "2026-05-31T00:00:00.000Z"; // 21h00 BRT de 30/05
+  const advancedAt = "2026-05-31T00:30:00.000Z"; // 21h00 BRT de 30/05
 
   // Lê os blocos atuais
   let blocks: any[] = [];
