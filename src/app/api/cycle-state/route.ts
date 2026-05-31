@@ -10,35 +10,18 @@ export async function GET() {
   const uid = session.user.id as string;
 
   const state = await prisma.userCycleState.findUnique({ where: { userId: uid } });
-  if (!state) {
-    return NextResponse.json({ currentDayIdx: 0, pendingBlocks: [], lastDate: "", advancedAt: "" });
-  }
+  if (!state) return NextResponse.json({ dayStates: {} });
 
-  // advancedAt é salvo dentro do campo pendingBlocks como objeto wrapper
-  // { blocks: [...], advancedAt: "ISO string" }
-  let pendingBlocks: any[] = [];
-  let advancedAt = "";
-  let manualDoneIds: string[] = [];
+  let dayStates: Record<string, any> = {};
   try {
-    const parsed = JSON.parse(state.pendingBlocks ?? "[]");
-    if (Array.isArray(parsed)) {
-      pendingBlocks = parsed;
-    } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.blocks)) {
-      pendingBlocks  = parsed.blocks;
-      advancedAt     = parsed.advancedAt ?? "";
-      manualDoneIds  = Array.isArray(parsed.manualDoneIds) ? parsed.manualDoneIds : [];
+    const parsed = JSON.parse(state.pendingBlocks ?? "{}");
+    // Novo formato: { dayStates: { "2026-06-02": { manualDone: { blockId: true } } } }
+    if (parsed?.dayStates) {
+      dayStates = parsed.dayStates;
     }
-  } catch {
-    pendingBlocks = [];
-  }
+  } catch { dayStates = {}; }
 
-  return NextResponse.json({
-    currentDayIdx: state.currentDayIdx,
-    pendingBlocks,
-    lastDate:      state.lastDate ?? "",
-    advancedAt,
-    manualDoneIds,
-  });
+  return NextResponse.json({ dayStates });
 }
 
 export async function POST(req: Request) {
@@ -47,29 +30,14 @@ export async function POST(req: Request) {
   const uid = session.user.id as string;
 
   const body = await req.json();
+  const { dayStates } = body;
 
-  // Salva pendingBlocks + advancedAt juntos no campo JSON
-  const { currentDayIdx, pendingBlocks, lastDate, advancedAt, manualDoneIds } = body;
-
-  const pendingPayload = JSON.stringify({
-    blocks:        pendingBlocks ?? [],
-    advancedAt:    advancedAt ?? "",
-    manualDoneIds: manualDoneIds ?? [],
-  });
+  const payload = JSON.stringify({ dayStates: dayStates ?? {} });
 
   await prisma.userCycleState.upsert({
     where:  { userId: uid },
-    create: {
-      userId:        uid,
-      currentDayIdx: currentDayIdx ?? 0,
-      pendingBlocks: pendingPayload,
-      lastDate:      lastDate ?? "",
-    },
-    update: {
-      currentDayIdx: currentDayIdx ?? 0,
-      pendingBlocks: pendingPayload,
-      lastDate:      lastDate ?? "",
-    },
+    create: { userId: uid, currentDayIdx: 0, pendingBlocks: payload, lastDate: "" },
+    update: { pendingBlocks: payload },
   });
 
   return NextResponse.json({ ok: true });

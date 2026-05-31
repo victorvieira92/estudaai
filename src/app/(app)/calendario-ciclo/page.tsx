@@ -49,15 +49,18 @@ export default function CalendarioCicloPage() {
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [showConfig,    setShowConfig]    = useState(false);
-  const [currentDayIdx, setCurrentDayIdx] = useState(0);
+  // Dia atual do ciclo: seg=0, ter=1, qua=2, qui=3, sex=4, sab=5, dom=6
+  const currentDayIdx = (() => {
+    const dow = new Date().toLocaleDateString("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" });
+    const map: Record<string, number> = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6 };
+    return map[dow] ?? 0;
+  })();
 
   useEffect(() => {
     Promise.all([
       fetch("/api/subjects").then(r => r.json()).catch(() => []),
       fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
-      // Lê o estado do ciclo do banco (igual à página /ciclo) — sem localStorage
-      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0 })),
-    ]).then(([su, bl, cycleState]) => {
+    ]).then(([su, bl]) => {
       const subjects: Subject[] = Array.isArray(su) ? su : su?.subjects ?? [];
       setSubjects(subjects);
       const mapped: StudyBlock[] = Array.isArray(bl) ? bl.map((b: any) => ({
@@ -70,8 +73,7 @@ export default function CalendarioCicloPage() {
       setDraftBlocks(mapped);
       if (mapped.length === 0) setShowConfig(true);
       // Usa o índice do banco, com clamp para não ultrapassar o tamanho do ciclo
-      const savedIdx = cycleState?.currentDayIdx ?? 0;
-      setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
+      // currentDayIdx calculado pelo dia da semana — não precisa do banco
     }).finally(() => setLoading(false));
   }, []);
 
@@ -160,13 +162,12 @@ export default function CalendarioCicloPage() {
         setDraftDayOrder(days);
         setDraftBlocks(mapped);
         setShowConfig(false);
-        // Ao salvar um novo ciclo, reseta o índice no banco também
+        // Ao salvar novo ciclo, limpa marcações manuais do banco
         await fetch("/api/cycle-state", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ currentDayIdx: 0, pendingBlocks: [], lastDate: "" }),
+          body: JSON.stringify({ dayStates: {} }),
         }).catch(console.error);
-        setCurrentDayIdx(0);
       }
     } finally { setSaving(false); }
   };
