@@ -305,24 +305,15 @@ export default function CicloPage() {
     const result: Record<number, string> = {};
     if (!cycleDays.length) return result;
 
-    // Dia atual = hoje
-    result[currentDayIdx] = todayDS;
-
-    // Para os dias anteriores, usa as datas do histórico real em ordem reversa
-    // Pega todas as datas com sessões, ordena desc, e associa aos índices anteriores
-    const datesWithSessions = Object.keys(dateToSessions)
-      .filter(d => d < todayDS && (dateToSessions[d]?.length ?? 0) > 0)
-      .sort()
-      .reverse();
-
-    for (let step = 1; step < cycleDays.length; step++) {
-      const prevIdx = (currentDayIdx - step + cycleDays.length) % cycleDays.length;
-      // Usa a data real do histórico se existir, senão subtrai linearmente
-      result[prevIdx] = datesWithSessions[step - 1] ?? (() => {
-        const d = new Date(todayDS + "T12:00:00");
-        d.setDate(d.getDate() - step);
-        return d.toISOString().slice(0, 10);
-      })();
+    // Âncora fixa: segunda-feira da semana atual = Dia 1 (idx 0)
+    // O ciclo sempre começa na segunda, então idx N = segunda + N dias
+    const monday = getMondayOfWeek(todayDS);
+    for (let idx = 0; idx < cycleDays.length; idx++) {
+      const d = new Date(monday + "T12:00:00");
+      d.setDate(d.getDate() + idx);
+      const dateStr = d.toISOString().slice(0, 10);
+      // Não mapeia datas futuras
+      if (dateStr <= todayDS) result[idx] = dateStr;
     }
     return result;
   })();
