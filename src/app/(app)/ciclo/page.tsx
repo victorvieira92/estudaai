@@ -231,20 +231,24 @@ export default function CicloPage() {
     return "partial";
   }, [blocks, isBlockDone]);
 
-  // ── Verifica se concluiu todos os blocos de hoje ─────────────────────────────
-  const checkTodayCelebration = useCallback((date: string) => {
+  // ── Verifica celebração sempre que dateToDayState muda ───────────────────────
+  useEffect(() => {
+    if (!blocks.length) return;
     const today = toBRDate(new Date());
-    if (date !== today) return;
-    const jsDoW  = new Date(today + "T12:00:00Z").getUTCDay();
-    const idx    = jsDoWtoCycleIdx(jsDoW);
+    const jsDoW = new Date(today + "T12:00:00Z").getUTCDay();
+    const idx   = jsDoWtoCycleIdx(jsDoW);
     const todayBlocks = blocks.filter(b => b.dayOfWeek === idx);
     if (!todayBlocks.length) return;
-    const allDone = todayBlocks.every(b => isBlockDone(date, b));
-    if (allDone) {
+    const allDone = todayBlocks.every(b => {
+      if (dateToDayState[today]?.manualDone[b.id]) return true;
+      if (!b.subjectId) return false;
+      return (dateToSessions[today] ?? []).some(s => s.subjectId === b.subjectId);
+    });
+    if (allDone && !showCelebration) {
       setCelebrationPhrase(FRASES[Math.floor(Math.random() * FRASES.length)]);
       setShowCelebration(true);
     }
-  }, [blocks, isBlockDone]);
+  }, [dateToDayState, blocks, dateToSessions]);
 
   // ── Dados do dia atual ───────────────────────────────────────────────────────
   const today      = toBRDate(new Date());
@@ -360,10 +364,7 @@ export default function CicloPage() {
                       </Link>
                     )}
                     <button
-                      onClick={() => {
-                        toggleManual(today, block.id);
-                        setTimeout(() => checkTodayCelebration(today), 100);
-                      }}
+                      onClick={() => toggleManual(today, block.id)}
                       className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${done && dateToDayState[today]?.manualDone[block.id] ? "bg-green-500 border-green-500 text-white" : done ? "bg-green-100 border-green-300 text-green-600" : "border-gray-300 hover:border-green-400"}`}>
                       {done && <CheckCircle className="w-4 h-4" />}
                     </button>
