@@ -18,20 +18,19 @@ export async function GET() {
   // { blocks: [...], advancedAt: "ISO string" }
   let pendingBlocks: any[] = [];
   let advancedAt = "";
+  let manualDoneIds: string[] = [];
   try {
     const parsed = JSON.parse(state.pendingBlocks ?? "[]");
     if (Array.isArray(parsed)) {
       pendingBlocks = parsed;
     } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.blocks)) {
-      pendingBlocks = parsed.blocks;
-      advancedAt    = parsed.advancedAt ?? "";
+      pendingBlocks  = parsed.blocks;
+      advancedAt     = parsed.advancedAt ?? "";
+      manualDoneIds  = Array.isArray(parsed.manualDoneIds) ? parsed.manualDoneIds : [];
     }
   } catch {
     pendingBlocks = [];
   }
-
-  // manualDoneIds também fica dentro do wrapper JSON
-  const manualDoneIds: string[] = Array.isArray(parsed?.manualDoneIds) ? parsed.manualDoneIds : [];
 
   return NextResponse.json({
     currentDayIdx: state.currentDayIdx,
