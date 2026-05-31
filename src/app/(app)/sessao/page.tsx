@@ -188,17 +188,54 @@ function SessaoContent() {
 
       // Verifica se concluiu todas as matérias do dia
       try {
-        const cycleDay = typeof window !== "undefined"
-          ? localStorage.getItem("estudaai_cycle_day") ?? "0"
-          : "0";
-        const schedRes = await fetch(`/api/schedule?cycleDay=${cycleDay}`);
-        if (schedRes.ok) {
-          const sched = await schedRes.json();
-          if (sched.nextBlockType === null) {
-            const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
-            setMotivPhrase(frase);
-            setShowCelebration(true);
-          }
+        const toBRDate = (d: Date) =>
+          new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
+        const todayDS = toBRDate(new Date());
+
+        const [cycleState, blocksRes, histRes] = await Promise.all([
+          fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0 })),
+          fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
+          fetch("/api/historico").then(r => r.json()).catch(() => []),
+        ]);
+
+        const currentDayIdx: number = cycleState?.currentDayIdx ?? 0;
+
+        // Dias únicos do ciclo ordenados
+        const daySet = new Set<number>();
+        const allBlocks: { dayOfWeek: number; subjectId: string | null }[] = Array.isArray(blocksRes) ? blocksRes : [];
+        allBlocks.forEach(b => daySet.add(b.dayOfWeek));
+        const cycleDays = Array.from(daySet).sort((a, b) => a - b);
+        const currentDay = cycleDays[currentDayIdx] ?? -1;
+
+        // Blocos de hoje
+        const todayBlocks = allBlocks.filter(b => b.dayOfWeek === currentDay && b.subjectId);
+
+        // Sessões de hoje do histórico
+        const todayGroup = Array.isArray(histRes)
+          ? histRes.find((g: any) => g.date === todayDS)
+          : null;
+        const todaySessions: { subjectId: string }[] = todayGroup?.sessions ?? [];
+
+        // Conta quantas sessões existem por matéria hoje
+        const sessionCount: Record<string, number> = {};
+        todaySessions.forEach((s: any) => {
+          if (s.subjectId) sessionCount[s.subjectId] = (sessionCount[s.subjectId] ?? 0) + 1;
+        });
+
+        // Verifica se todos os blocos de hoje foram cobertos
+        const used: Record<string, number> = {};
+        const allCovered = todayBlocks.every(b => {
+          if (!b.subjectId) return true;
+          const avail = sessionCount[b.subjectId] ?? 0;
+          const u = used[b.subjectId] ?? 0;
+          if (u < avail) { used[b.subjectId] = u + 1; return true; }
+          return false;
+        });
+
+        if (allCovered && todayBlocks.length > 0) {
+          const frase = FRASES[Math.floor(Math.random() * FRASES.length)];
+          setMotivPhrase(frase);
+          setShowCelebration(true);
         }
       } catch { /* não bloqueia */ }
 

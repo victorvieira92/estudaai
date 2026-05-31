@@ -11,6 +11,7 @@ interface Subject { id: string; name: string; }
 interface HistSession {
   subjectId: string; subjectName: string;
   hours: number; questions: number; correct: number; wrong: number;
+  createdAt?: string;
 }
 
 const BG = "#1B4040";
@@ -95,13 +96,16 @@ export default function CicloPage() {
 
   // Semana selecionada no seletor (segunda-feira da semana, YYYY-MM-DD)
   const [viewWeekMonday, setViewWeekMonday] = useState<string>("");
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationDay, setCelebrationDay] = useState(0);
+  const [cycleAdvancedAt, setCycleAdvancedAt] = useState<string>(""); // ISO timestamp do último avanço manual
 
   // Salva estado do ciclo no banco
-  const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string) => {
+  const saveCycleState = (dayIdx: number, pending: Block[], lastDate: string, advancedAt?: string) => {
     fetch("/api/cycle-state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentDayIdx: dayIdx, pendingBlocks: pending, lastDate }),
+      body: JSON.stringify({ currentDayIdx: dayIdx, pendingBlocks: pending, lastDate, advancedAt: advancedAt ?? null }),
     }).catch(console.error);
   };
 
@@ -145,6 +149,10 @@ export default function CicloPage() {
 
       // Remove pendentes que já têm sessão registrada em qualquer data
       const usedForPending: Record<string, number> = {};
+      // Lê o timestamp do último avanço manual (gravado no banco via campo advancedAt)
+      const advancedAtFromDB: string = cycleState?.advancedAt ?? "";
+      if (advancedAtFromDB) setCycleAdvancedAt(advancedAtFromDB);
+
       const savedPendingFromDB: Block[] = rawPendingFromDB.filter(b => {
         if (!b.subjectId) return true; // sem matéria: mantém
         const available = allSessionCountBySubject[b.subjectId] ?? 0;
@@ -173,13 +181,19 @@ export default function CicloPage() {
             questions:   s.questions ?? 0,
             correct:     s.correct ?? 0,
             wrong:       s.wrong ?? 0,
+            createdAt:   s.createdAt ?? null,
           }));
         });
       }
       setDateToSessions(dtSess);
 
-      // Sessões de hoje
-      const todaySess = dtSess[todayDS] ?? [];
+      // Sessões de hoje — filtra as que foram criadas ANTES do último avanço manual de ciclo
+      // Isso evita que sessões do Ciclo N apareçam como "registrado hoje" no Ciclo N+1
+      const rawTodaySess = dtSess[todayDS] ?? [];
+      const advancedAtTS = advancedAtFromDB ? new Date(advancedAtFromDB).getTime() : 0;
+      const todaySess = advancedAtTS > 0
+        ? rawTodaySess.filter(s => s.createdAt ? new Date(s.createdAt).getTime() >= advancedAtTS : true)
+        : rawTodaySess;
       setTodaySessions(todaySess);
 
       // Define semana visualizada como a semana atual
@@ -347,10 +361,18 @@ export default function CicloPage() {
 
   const concludeDay = () => {
     setCompleting(true);
-    const undone  = allToday.filter(b => !isDone(b));
-    const nextIdx = (currentDayIdx + 1) % cycleDays.length;
-    const todayDS = toBRDate(new Date());
-    saveCycleState(nextIdx, undone, todayDS);
+    const undone    = allToday.filter(b => !isDone(b));
+    const nextIdx   = (currentDayIdx + 1) % cycleDays.length;
+    const todayDS   = toBRDate(new Date());
+    const advancedAt = new Date().toISOString(); // timestamp exato do avanço
+    saveCycleState(nextIdx, undone, todayDS, advancedAt);
+    setCycleAdvancedAt(advancedAt);
+    // Detecta volta ao início do ciclo (ciclo completo)
+    const completedCycle = nextIdx === 0 || nextIdx < currentDayIdx;
+    if (completedCycle) {
+      setCelebrationDay(currentDayIdx + 1);
+      setShowCelebration(true);
+    }
     setCurrentDayIdx(nextIdx);
     setPendingBlocks(undone);
     setManualDone({});
@@ -615,6 +637,25 @@ export default function CicloPage() {
           })()}
         </div>
       </div>
+  {/* ── Popup de celebração ── */}
+  {showCelebration && (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+      <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl animate-bounce-once">
+        <div className="text-6xl mb-4">🎉</div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Ciclo completo!</h2>
+        <p className="text-gray-500 mb-1">Você concluiu todos os {celebrationDay} dias do ciclo.</p>
+        <p className="text-sm text-gray-400 mb-6">O ciclo reiniciou automaticamente. Bora pro próximo!</p>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => setShowCelebration(false)}
+            className="w-full py-3 text-white font-bold rounded-2xl text-base transition-colors"
+            style={{ backgroundColor: BG }}>
+            Continuar estudando 💪
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
     </div>
   );
 }
