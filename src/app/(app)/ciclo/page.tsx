@@ -296,13 +296,25 @@ export default function CicloPage() {
     const todayDS = toBRDate(new Date());
     const result: Record<number, string> = {};
     if (!cycleDays.length) return result;
+
+    // Dia atual = hoje
     result[currentDayIdx] = todayDS;
-    // dias anteriores
+
+    // Para os dias anteriores, usa as datas do histórico real em ordem reversa
+    // Pega todas as datas com sessões, ordena desc, e associa aos índices anteriores
+    const datesWithSessions = Object.keys(dateToSessions)
+      .filter(d => d < todayDS && (dateToSessions[d]?.length ?? 0) > 0)
+      .sort()
+      .reverse();
+
     for (let step = 1; step < cycleDays.length; step++) {
       const prevIdx = (currentDayIdx - step + cycleDays.length) % cycleDays.length;
-      const d = new Date(todayDS + "T12:00:00");
-      d.setDate(d.getDate() - step);
-      result[prevIdx] = d.toISOString().slice(0, 10);
+      // Usa a data real do histórico se existir, senão subtrai linearmente
+      result[prevIdx] = datesWithSessions[step - 1] ?? (() => {
+        const d = new Date(todayDS + "T12:00:00");
+        d.setDate(d.getDate() - step);
+        return d.toISOString().slice(0, 10);
+      })();
     }
     return result;
   })();
