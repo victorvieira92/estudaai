@@ -213,14 +213,46 @@ export default function CicloPage() {
   }, [saveState]);
 
   // ── Verifica se bloco está feito ─────────────────────────────────────────────
-  const isBlockDone = useCallback((date: string, block: Block): boolean => {
-    // 1. Marcado manualmente
-    if (dateToDayState[date]?.manualDone[block.id]) return true;
-    // 2. Tem sessão registrada nessa data para essa matéria
-    if (!block.subjectId) return false;
-    const sess = dateToSessions[date] ?? [];
-    return sess.some(s => s.subjectId === block.subjectId);
+  // Retorna mapa de blockId → done para uma lista de blocos numa data
+  // Respeita contagem: 2 blocos da mesma matéria precisam de 2 sessões
+  const computeBlockDoneMap = useCallback((date: string, dayBlocks: Block[]): Record<string, boolean> => {
+    const result: Record<string, boolean> = {};
+    const sessions = dateToSessions[date] ?? [];
+    // Conta sessões disponíveis por matéria
+    const sessionCount: Record<string, number> = {};
+    sessions.forEach(s => {
+      if (s.subjectId) sessionCount[s.subjectId] = (sessionCount[s.subjectId] ?? 0) + 1;
+    });
+    // Consome 1 sessão por bloco da mesma matéria
+    const used: Record<string, number> = {};
+    dayBlocks.forEach(b => {
+      if (dateToDayState[date]?.manualDone[b.id]) {
+        result[b.id] = true;
+        return;
+      }
+      if (!b.subjectId) { result[b.id] = false; return; }
+      const avail = sessionCount[b.subjectId] ?? 0;
+      const u = used[b.subjectId] ?? 0;
+      if (u < avail) {
+        result[b.id] = true;
+        used[b.subjectId] = u + 1;
+      } else {
+        result[b.id] = false;
+      }
+    });
+    return result;
   }, [dateToDayState, dateToSessions]);
+
+  const isBlockDone = useCallback((date: string, block: Block, allDayBlocks?: Block[]): boolean => {
+    if (dateToDayState[date]?.manualDone[block.id]) return true;
+    if (!block.subjectId) return false;
+    // Se não passou os blocos do dia, usa só sessão simples (fallback)
+    if (!allDayBlocks) {
+      const sess = dateToSessions[date] ?? [];
+      return sess.some(s => s.subjectId === block.subjectId);
+    }
+    return computeBlockDoneMap(date, allDayBlocks)[block.id] ?? false;
+  }, [dateToDayState, dateToSessions, computeBlockDoneMap]);
 
   // ── Status do dia (para coloração do quadrinho) ──────────────────────────────
   const getDayStatus = useCallback((idx: number, weekMonday: string) => {
@@ -237,7 +269,8 @@ export default function CicloPage() {
     if (isFuture) return "future";
     if (isToday)  return "today";
 
-    const doneCount = dayBlocks.filter(b => isBlockDone(date, b)).length;
+    const doneMap2 = computeBlockDoneMap(date, dayBlocks);
+    const doneCount = dayBlocks.filter(b => doneMap2[b.id]).length;
     if (doneCount === 0) return "none";
     if (doneCount >= dayBlocks.length) return "done";
     return "partial";
@@ -252,11 +285,8 @@ export default function CicloPage() {
     const idx   = jsDoWtoCycleIdx(jsDoW);
     const todayBlocks = blocks.filter(b => b.dayOfWeek === idx);
     if (!todayBlocks.length) return;
-    const allDone = todayBlocks.every(b => {
-      if (dateToDayState[today]?.manualDone[b.id]) return true;
-      if (!b.subjectId) return false;
-      return (dateToSessions[today] ?? []).some(s => s.subjectId === b.subjectId);
-    });
+    const celebDoneMap = computeBlockDoneMap(today, todayBlocks);
+    const allDone = todayBlocks.every(b => celebDoneMap[b.id]);
     if (allDone && !celebrationShown) {
       setCelebrationShown(true);
       setCelebrationPhrase(FRASES[Math.floor(Math.random() * FRASES.length)]);
@@ -270,7 +300,8 @@ export default function CicloPage() {
   const todayJsDoW = new Date(today + "T12:00:00Z").getUTCDay();
   const todayIdx   = jsDoWtoCycleIdx(todayJsDoW);
   const todayBlocks = blocks.filter(b => b.dayOfWeek === todayIdx);
-  const todayDone  = todayBlocks.filter(b => isBlockDone(today, b)).length;
+  const todayDoneMap = computeBlockDoneMap(today, todayBlocks);
+  const todayDone  = todayBlocks.filter(b => todayDoneMap[b.id]).length;
   const todayHours = todayBlocks.reduce((a, b) => a + b.hours, 0);
 
   // ── Semanas disponíveis ──────────────────────────────────────────────────────
@@ -353,7 +384,7 @@ export default function CicloPage() {
               </div>
             )}
             {todayBlocks.map((block, i) => {
-              const done = isBlockDone(today, block);
+              const done = todayDoneMap[block.id] ?? false;
               const name = block.subjectName ?? "Sem matéria";
               return (
                 <div key={block.id} className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all ${done ? "bg-green-50 border-green-200" : "bg-white border-gray-200"}`}>
@@ -485,7 +516,8 @@ export default function CicloPage() {
                 <div className="space-y-2">
                   {selBlocks.map(b => {
                     const name    = b.subjectName ?? "—";
-                    const done    = isBlockDone(selDateStr, b);
+                    const selDoneMap = computeBlockDoneMap(selDateStr, selBlocks);
+                    const done    = selDoneMap[b.id] ?? false;
                     const manual  = !!dateToDayState[selDateStr]?.manualDone[b.id];
                     const matSess = selSess.filter(s => s.subjectId === b.subjectId);
                     return (
