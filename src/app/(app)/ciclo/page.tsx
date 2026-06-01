@@ -169,6 +169,13 @@ export default function CicloPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Recarrega quando o usuário volta para a aba (ex: deletou sessão no histórico)
+  useEffect(() => {
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [load]);
+
   // Verifica virada de meia-noite
   useEffect(() => {
     const iv = setInterval(() => {
@@ -231,9 +238,10 @@ export default function CicloPage() {
     return "partial";
   }, [blocks, isBlockDone]);
 
-  // ── Verifica celebração sempre que dateToDayState muda ───────────────────────
+  // ── Verifica celebração quando sessões ou marcações mudam ───────────────────
+  const [celebrationShown, setCelebrationShown] = useState(false);
   useEffect(() => {
-    if (!blocks.length) return;
+    if (!blocks.length || loading) return;
     const today = toBRDate(new Date());
     const jsDoW = new Date(today + "T12:00:00Z").getUTCDay();
     const idx   = jsDoWtoCycleIdx(jsDoW);
@@ -244,11 +252,13 @@ export default function CicloPage() {
       if (!b.subjectId) return false;
       return (dateToSessions[today] ?? []).some(s => s.subjectId === b.subjectId);
     });
-    if (allDone && !showCelebration) {
+    if (allDone && !celebrationShown) {
+      setCelebrationShown(true);
       setCelebrationPhrase(FRASES[Math.floor(Math.random() * FRASES.length)]);
       setShowCelebration(true);
     }
-  }, [dateToDayState, blocks, dateToSessions]);
+    if (!allDone) setCelebrationShown(false);
+  }, [dateToDayState, dateToSessions, blocks, loading]);
 
   // ── Dados do dia atual ───────────────────────────────────────────────────────
   const today      = toBRDate(new Date());
