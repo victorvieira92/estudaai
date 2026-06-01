@@ -172,8 +172,13 @@ export default function CicloPage() {
   // Recarrega quando o usuário volta para a aba (ex: deletou sessão no histórico)
   useEffect(() => {
     const onFocus = () => load();
+    const onVisible = () => { if (document.visibilityState === "visible") load(); };
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
 
   // Verifica virada de meia-noite
