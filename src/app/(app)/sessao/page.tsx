@@ -192,23 +192,23 @@ function SessaoContent() {
           new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(d);
         const todayDS = toBRDate(new Date());
 
-        const [cycleState, blocksRes, histRes] = await Promise.all([
-          fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0 })),
+        // Dia da semana em BRT: seg=0, ter=1, qua=2, qui=3, sex=4, sab=5, dom=6
+        const jsDoW = new Date(todayDS + "T12:00:00Z").getUTCDay();
+        const todayIdx = jsDoW === 0 ? 6 : jsDoW - 1;
+
+        const [blocksRes, histRes, stateRes] = await Promise.all([
           fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
           fetch("/api/historico").then(r => r.json()).catch(() => []),
+          fetch("/api/cycle-state").then(r => r.json()).catch(() => ({})),
         ]);
 
-        const currentDayIdx: number = cycleState?.currentDayIdx ?? 0;
+        const allBlocks: { dayOfWeek: number; subjectId: string | null; id: string }[] =
+          Array.isArray(blocksRes) ? blocksRes.map((b: any) => ({
+            id: b.id, dayOfWeek: b.dayOfWeek, subjectId: b.subjectId ?? null,
+          })) : [];
 
-        // Dias únicos do ciclo ordenados
-        const daySet = new Set<number>();
-        const allBlocks: { dayOfWeek: number; subjectId: string | null }[] = Array.isArray(blocksRes) ? blocksRes : [];
-        allBlocks.forEach(b => daySet.add(b.dayOfWeek));
-        const cycleDays = Array.from(daySet).sort((a, b) => a - b);
-        const currentDay = cycleDays[currentDayIdx] ?? -1;
-
-        // Blocos de hoje
-        const todayBlocks = allBlocks.filter(b => b.dayOfWeek === currentDay && b.subjectId);
+        // Blocos do dia atual (pelo índice do dia da semana)
+        const todayBlocks = allBlocks.filter(b => b.dayOfWeek === todayIdx && b.subjectId);
 
         // Sessões de hoje do histórico
         const todayGroup = Array.isArray(histRes)
@@ -216,16 +216,21 @@ function SessaoContent() {
           : null;
         const todaySessions: { subjectId: string }[] = todayGroup?.sessions ?? [];
 
-        // Conta quantas sessões existem por matéria hoje
+        // Marcações manuais do banco
+        const manualDone: Record<string, boolean> =
+          stateRes?.dayStates?.[todayDS]?.manualDone ?? {};
+
+        // Conta sessões por matéria
         const sessionCount: Record<string, number> = {};
         todaySessions.forEach((s: any) => {
           if (s.subjectId) sessionCount[s.subjectId] = (sessionCount[s.subjectId] ?? 0) + 1;
         });
 
-        // Verifica se todos os blocos de hoje foram cobertos
+        // Verifica se todos os blocos estão cobertos (sessão OU manual)
         const used: Record<string, number> = {};
         const allCovered = todayBlocks.every(b => {
           if (!b.subjectId) return true;
+          if (manualDone[b.id]) return true;
           const avail = sessionCount[b.subjectId] ?? 0;
           const u = used[b.subjectId] ?? 0;
           if (u < avail) { used[b.subjectId] = u + 1; return true; }
