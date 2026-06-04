@@ -56,6 +56,8 @@ function SessaoContent() {
   // Questões
   const [correct,    setCorrect]    = useState("0");
   const [wrong,      setWrong]      = useState("0");
+  const [qStart,     setQStart]     = useState("");
+  const [qEnd,       setQEnd]       = useState("");
 
   // Páginas (múltiplas)
   const [pages, setPages] = useState<PageRange[]>([{ id: uid(), start: "0", end: "0" }]);
@@ -120,7 +122,7 @@ function SessaoContent() {
   const resetForm = () => {
     setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicId("");
     setMaterial(""); setTheoryDone(false); setScheduleReview(false);
-    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0");
+    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQStart(""); setQEnd("");
     setPages([{ id: uid(), start: "0", end: "0" }]);
     setVideos([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
     setComment(""); setDateMode("hoje"); setOtherDate("");
@@ -423,6 +425,35 @@ function SessaoContent() {
                     className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
                   <input type="number" min="0" value={wrong} onChange={e => setWrong(e.target.value)}
                     className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
+                </div>
+                {/* Calculadora: questão inicial → final */}
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Calcular (Nº inicial → final)</p>
+                  <div className="flex items-center gap-1">
+                    <input type="number" min="0" placeholder="Ex: 53" value={qStart} onChange={e => setQStart(e.target.value)}
+                      className={`${inputCls} text-gray-700 border-gray-200 text-sm w-2/5 py-0.5`} />
+                    <span className="text-gray-400 text-xs shrink-0">→</span>
+                    <input type="number" min="0" placeholder="Ex: 91" value={qEnd} onChange={e => setQEnd(e.target.value)}
+                      className={`${inputCls} text-gray-700 border-gray-200 text-sm w-2/5 py-0.5`} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const s = parseInt(qStart) || 0;
+                        const e = parseInt(qEnd)   || 0;
+                        if (e >= s && s > 0) {
+                          const total = e - s + 1;
+                          const w = parseInt(wrong) || 0;
+                          setCorrect(String(Math.max(0, total - w)));
+                        }
+                      }}
+                      className="shrink-0 px-2 py-1 text-white text-[10px] font-bold rounded-lg transition-colors"
+                      style={{ backgroundColor: "#1B4040" }}>
+                      OK
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-gray-400 mt-1">
+                    {(() => { const s = parseInt(qStart)||0; const e = parseInt(qEnd)||0; return s>0&&e>=s ? `${e-s+1} questões` : ""; })()}
+                  </p>
                 </div>
               </div>
 
