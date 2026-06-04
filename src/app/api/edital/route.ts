@@ -39,9 +39,31 @@ export async function GET() {
   if (!session?.user?.id) return NextResponse.json([], { status: 401 });
   const uid = session.user.id as string;
 
-  // Busca os dados salvos do usuário
+  // Busca os dados salvos do usuário no EditalTopico
   const saved = await prisma.editalTopico.findMany({ where: { userId: uid } });
   const savedMap = new Map(saved.map(s => [`${s.disciplina}|||${s.topico}`, s]));
+
+  // Busca sessões de estudo para pré-preencher questões/acertos/erros automaticamente
+  const sessions = await prisma.studySession.findMany({
+    where: { userId: uid },
+    select: { notes: true, questions: true, correct: true, wrong: true, createdAt: true, subject: { select: { name: true } } },
+  });
+
+  // Agrupa sessões por (disciplina, tópico) — usa topicName do notes JSON
+  const sessMap = new Map<string, { questoes: number; acertos: number; erros: number; ultimoEstudo: Date | null }>();
+  sessions.forEach(s => {
+    let topicName = "";
+    let subjName  = s.subject?.name ?? "";
+    try { const n = JSON.parse(s.notes ?? "{}"); topicName = n.topicName ?? ""; } catch {}
+    if (!topicName || !subjName) return;
+    const key = `${subjName}|||${topicName}`;
+    const cur = sessMap.get(key) ?? { questoes: 0, acertos: 0, erros: 0, ultimoEstudo: null };
+    cur.questoes += s.questions ?? 0;
+    cur.acertos  += s.correct   ?? 0;
+    cur.erros    += s.wrong     ?? 0;
+    if (!cur.ultimoEstudo || s.createdAt > cur.ultimoEstudo) cur.ultimoEstudo = s.createdAt;
+    sessMap.set(key, cur);
+  });
 
   // Total de tópicos
   let totalTopicos = 0;
@@ -53,17 +75,29 @@ export async function GET() {
       nome: disc.nome,
       topicos: disc.topicos.map((t, idx) => {
         totalTopicos++;
-        const key  = `${disc.nome}|||${t}`;
-        const dado = savedMap.get(key);
+        const key     = `${disc.nome}|||${t}`;
+        const dado    = savedMap.get(key);
+        const fromSess = sessMap.get(key);
         if (dado?.concluido) concluidos++;
+
+        // Lógica híbrida:
+        // Se tem dados manuais (questoes > 0 no EditalTopico), usa os manuais
+        // Caso contrário, pré-preenche com dados das sessões
+        const temManual = dado && dado.questoes > 0;
+        const questoes   = temManual ? dado!.questoes  : (fromSess?.questoes  ?? 0);
+        const acertos    = temManual ? dado!.acertos   : (fromSess?.acertos   ?? 0);
+        const erros      = temManual ? dado!.erros     : (fromSess?.erros     ?? 0);
+        const ultimoEstudo = dado?.ultimoEstudo ?? fromSess?.ultimoEstudo ?? null;
+
         return {
-          nome:        t,
-          ordem:       idx,
-          concluido:   dado?.concluido   ?? false,
-          questoes:    dado?.questoes    ?? 0,
-          acertos:     dado?.acertos     ?? 0,
-          erros:       dado?.erros       ?? 0,
-          ultimoEstudo: dado?.ultimoEstudo ?? null,
+          nome:         t,
+          ordem:        idx,
+          concluido:    dado?.concluido ?? false,
+          questoes,
+          acertos,
+          erros,
+          ultimoEstudo,
+          autoPreenchido: !temManual && !!fromSess, // indica que veio das sessões
         };
       }),
     })),

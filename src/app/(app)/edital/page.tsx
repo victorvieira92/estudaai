@@ -12,6 +12,7 @@ interface Topico {
   concluido:   boolean;
   questoes:    number;
   acertos:     number;
+  autoPreenchido?: boolean;
   erros:       number;
   ultimoEstudo: string | null;
 }
@@ -103,6 +104,9 @@ function TopicoRow({
         </div>
       ) : (
         <div className="flex items-center gap-3 shrink-0">
+          {topico.autoPreenchido && topico.questoes > 0 && (
+              <span className="text-[10px] text-blue-400 font-medium ml-1" title="Pré-preenchido automaticamente das sessões de estudo">↻ auto</span>
+            )}
           {topico.questoes > 0 ? (
             <>
               <span className="text-sm font-bold text-green-500 w-6 text-center">{topico.acertos}</span>
