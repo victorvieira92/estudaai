@@ -43,20 +43,53 @@ export async function GET() {
   const saved = await prisma.editalTopico.findMany({ where: { userId: uid } });
   const savedMap = new Map(saved.map(s => [`${s.disciplina}|||${s.topico}`, s]));
 
-  // Busca sessões de estudo para pré-preencher questões/acertos/erros automaticamente
-  const sessions = await prisma.studySession.findMany({
+  // Mapeamento Subject.name → nome da disciplina no edital
+  const SUBJECT_NAME_MAP: Record<string, string> = {
+    "Contabilidade Geral e Pública": "Contabilidade Geral e Pública",
+    "Contabilidade Geral":          "Contabilidade Geral e Pública",
+    "Português":                    "Língua Portuguesa",
+    "Direito Administrativo":       "Direito Administrativo",
+    "Direito Constitucional":       "Direito Constitucional",
+    "Direito Tributário":           "Direito Tributário",
+    "Auditoria":                    "Auditoria",
+  };
+
+  // Busca matérias com seus tópicos ATUAIS (nomes já editados pelo usuário na aba Matérias)
+  const subjects = await prisma.subject.findMany({
     where: { userId: uid },
-    select: { notes: true, questions: true, correct: true, wrong: true, createdAt: true, subject: { select: { name: true } } },
+    select: { id: true, name: true, topics: { select: { name: true } } },
   });
 
-  // Agrupa sessões por (disciplina, tópico) — usa topicName do notes JSON
+  // Mapa subjectId → nome edital
+  const subjectEditalName: Record<string, string> = {};
+  subjects.forEach(s => { subjectEditalName[s.id] = SUBJECT_NAME_MAP[s.name] ?? s.name; });
+
+  // Mapa (subjectId, topicName_sessao) → topicName_atual
+  // Permite resolver renomeações: se o nome da sessão bate com um tópico atual, usa o nome atual
+  const topicNameMap = new Map<string, string>();
+  subjects.forEach(s => {
+    s.topics.forEach(t => {
+      topicNameMap.set(`${s.id}|||${t.name}`, t.name);
+    });
+  });
+
+  // Busca sessões
+  const sessions = await prisma.studySession.findMany({
+    where: { userId: uid },
+    select: { notes: true, questions: true, correct: true, wrong: true, createdAt: true, subjectId: true },
+  });
+
+  // Agrupa por (disciplina edital, tópico atual)
   const sessMap = new Map<string, { questoes: number; acertos: number; erros: number; ultimoEstudo: Date | null }>();
   sessions.forEach(s => {
-    let topicName = "";
-    let subjName  = s.subject?.name ?? "";
-    try { const n = JSON.parse(s.notes ?? "{}"); topicName = n.topicName ?? ""; } catch {}
-    if (!topicName || !subjName) return;
-    const key = `${subjName}|||${topicName}`;
+    let topicNameFromSession = "";
+    try { const n = JSON.parse(s.notes ?? "{}"); topicNameFromSession = n.topicName ?? ""; } catch {}
+    if (!topicNameFromSession || !s.subjectId) return;
+    const editalSubj = subjectEditalName[s.subjectId];
+    if (!editalSubj) return;
+    // Usa nome atual do tópico se existir (lida com renomeações), senão usa o nome da sessão
+    const resolvedTopic = topicNameMap.get(`${s.subjectId}|||${topicNameFromSession}`) ?? topicNameFromSession;
+    const key = `${editalSubj}|||${resolvedTopic}`;
     const cur = sessMap.get(key) ?? { questoes: 0, acertos: 0, erros: 0, ultimoEstudo: null };
     cur.questoes += s.questions ?? 0;
     cur.acertos  += s.correct   ?? 0;
