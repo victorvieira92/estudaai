@@ -123,7 +123,7 @@ function SessaoContent() {
   const resetForm = () => {
     setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicId("");
     setMaterial(""); setTheoryDone(false); setScheduleReview(false);
-    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQStart(""); setQEnd("");
+    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQInicial(""); setQFinal(""); setQErros("");
     setPages([{ id: uid(), start: "0", end: "0" }]);
     setVideos([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
     setComment(""); setDateMode("hoje"); setOtherDate("");
