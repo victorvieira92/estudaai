@@ -427,6 +427,40 @@ function SessaoContent() {
                   <input type="number" min="0" value={wrong} onChange={e => setWrong(e.target.value)}
                     className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
                 </div>
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="grid grid-cols-3 gap-1.5 mb-2">
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Inicial</p>
+                      <input type="number" min="0" placeholder="1" value={qInicial} onChange={e => setQInicial(e.target.value)}
+                        className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Final</p>
+                      <input type="number" min="0" placeholder="39" value={qFinal} onChange={e => setQFinal(e.target.value)}
+                        className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Erros</p>
+                      <input type="number" min="0" placeholder="5" value={qErros} onChange={e => setQErros(e.target.value)}
+                        className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
+                    </div>
+                  </div>
+                  <button type="button"
+                    onClick={() => {
+                      const i = parseInt(qInicial) || 0;
+                      const f = parseInt(qFinal)   || 0;
+                      const e = parseInt(qErros)   || 0;
+                      if (f >= i && i > 0) {
+                        const total = f - i + 1;
+                        setCorrect(String(Math.max(0, total - e)));
+                        setWrong(String(e));
+                      }
+                    }}
+                    className="w-full py-1.5 text-white text-[11px] font-semibold rounded-lg"
+                    style={{ backgroundColor: "#1B4040" }}>
+                    Calcular
+                  </button>
+                </div>
 
               </div>
 
