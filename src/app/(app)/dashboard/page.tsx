@@ -1,548 +1,495 @@
 "use client";
-import React, { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import {
-  CheckCircle, Flame, RefreshCw, BookOpen,
-  ChevronLeft, ChevronRight,
-} from "lucide-react";
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  LineChart, Line,
 } from "recharts";
+import { BookOpen, Target, TrendingUp, Map } from "lucide-react";
 
-const BG = "#1B4040";
-
+interface SubjectStat {
+  name: string; hours: number; questions: number;
+  correct: number; wrong: number; accuracy: number | null;
+}
 interface WeekDay { day: string; date: string; hours: number; questions: number; correct: number; wrong: number; }
 interface WeekData { weekOffset: number; startDate: string; endDate: string; days: WeekDay[]; }
-
 interface Stats {
-  totalHours:      number;
-  totalQuestions:  number;
-  totalCorrect:    number;
-  totalWrong:      number;
-  accuracy:        number | null;
-  completedPdfs:   number;
-  totalPdfs:       number;
-  pendingErrors:   number;
-  pendingReviews:  number;
-  lateReviews:     number;
-  streak:          number;
-  studiedDays:     number;
-  totalDays:       number;
-  consistency:     number;
-  consistencyDots: { date: string; studied: boolean }[];
-  todayHours:      number;
-  todayQuestions:  number;
-  todayBySubject:  { name: string; hours: number }[];
-  subjectStats:    { name: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null }[];
-  weeklyHours:     { day: string; hours: number }[];
-  weeksData:       WeekData[];
-  weeklyGoalHours: number;
+  totalHours: number; totalQuestions: number; totalCorrect: number; totalWrong: number;
+  accuracy: number | null; completedPdfs: number; totalPdfs: number;
+  pendingErrors: number; resolvedErrors: number; pendingReviews: number; lateReviews: number;
+  subjectStats: SubjectStat[]; weeklyHours: { day: string; hours: number }[];
+  weeksData: WeekData[];
+  criticalErrors: { title: string; subject: string; difficulty: string; reviewCount: number; wrongCount: number }[];
 }
 
-const PIE_COLORS = [BG,"#3B82F6","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#14B8A6"];
+// ── Dados do histórico para mapa de dificuldades ──────────────────────────────
+interface HistoricoSession {
+  subjectId: string; subjectName: string;
+  topicName: string; pdfTitle: string;
+  questions: number; correct: number; wrong: number; hours: number;
+}
+
+interface TopicStat {
+  topicName: string; subjectName: string;
+  questions: number; correct: number; wrong: number; hours: number;
+  accuracy: number | null;
+  level: "critica" | "atencao" | "ok" | "sem_dados";
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+}
 
 function fmtH(h: number) {
   const hh = Math.floor(h); const mm = Math.round((h - hh) * 60);
   return mm > 0 ? `${hh}h${mm.toString().padStart(2,"0")}min` : `${hh}h`;
 }
 function fmtDate(ds: string) {
-  const d = new Date(ds + "T12:00:00");
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  return new Date(ds + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 }
 
-
-// Componente de Metas Semanais com meta de questões editável
-function MetasSemanal({ weekTotalHours, weekTotalQ, weeklyGoalHours, userId }: {
-  weekTotalHours:  number;
-  weekTotalQ:      number;
-  weeklyGoalHours: number;
-  userId?:         string;
+function EmptyCard({ icon: Icon, title, description, action }: {
+  icon: React.ElementType; title: string; description: string;
+  action?: { label: string; href: string };
 }) {
-  const storageKey = userId ? `estudaai_meta_q_${userId}` : "estudaai_meta_q";
-  const [metaQ,      setMetaQ]      = React.useState(150);
-  const [editingQ,   setEditingQ]   = React.useState(false);
-  const [inputQ,     setInputQ]     = React.useState("");
-
-  // Carrega meta de questões do localStorage
-  React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) setMetaQ(parseInt(saved) || 150);
-    } catch {}
-  }, [storageKey]);
-
-  const saveMetaQ = () => {
-    const v = parseInt(inputQ);
-    if (v > 0) {
-      setMetaQ(v);
-      try { localStorage.setItem(storageKey, String(v)); } catch {}
-    }
-    setEditingQ(false);
-  };
-
-  // weeklyGoalHours vem dos StudyBlocks — exatamente como configurado, sem arredondar
-  const horasMeta = weeklyGoalHours;
-  const pctHoras  = horasMeta > 0 ? Math.min(100, Math.round((weekTotalHours / horasMeta) * 100)) : 0;
-  const pctQ     = Math.min(100, Math.round((weekTotalQ / metaQ) * 100));
-
-  const Bar = ({ pct, color }: { pct: number; color: string }) => (
-    <div className="relative h-5 bg-gray-100 rounded-full overflow-hidden">
-      <div className="h-full rounded-full transition-all flex items-center justify-end pr-2"
-        style={{ width: `${Math.max(pct, 8)}%`, backgroundColor: color }}>
-        {pct >= 15 && <span className="text-white text-[10px] font-bold">{pct}%</span>}
+  return (
+    <div className="flex flex-col items-center justify-center py-10 text-center">
+      <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mb-3">
+        <Icon className="w-6 h-6 text-gray-400" />
       </div>
-      {pct < 15 && (
-        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 text-[10px] font-bold">{pct}%</span>
+      <p className="text-sm font-semibold text-gray-700 mb-1">{title}</p>
+      <p className="text-xs text-gray-400 max-w-xs leading-relaxed">{description}</p>
+      {action && (
+        <Link href={action.href}
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-xs font-semibold rounded-lg transition-colors">
+          {action.label}
+        </Link>
       )}
     </div>
+  );
+}
+
+const HorasTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-xs">
+      <p className="font-bold text-gray-900 mb-1">{label}</p>
+      <p className="text-gray-600">{fmtH(payload[0].value)}</p>
+    </div>
+  );
+};
+
+const DesempenhoTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const correct = payload.find((p: any) => p.dataKey === "correct")?.value ?? 0;
+  const wrong   = payload.find((p: any) => p.dataKey === "wrong")?.value ?? 0;
+  const total   = correct + wrong;
+  const pct     = total > 0 ? Math.round((correct / total) * 100) : 0;
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-xs min-w-[140px]">
+      <p className="font-bold text-gray-900 mb-2">{label}</p>
+      <p className="text-green-600">Acertos: <strong>{correct}</strong></p>
+      <p className="text-red-500">Erros: <strong>{wrong}</strong></p>
+      {total > 0 && <p className="text-gray-500 mt-1">Acurácia: <strong>{pct}%</strong></p>}
+    </div>
+  );
+};
+
+// ── MAPA DE DIFICULDADES ──────────────────────────────────────────────────────
+function MapaDificuldades({ sessions }: { sessions: HistoricoSession[] }) {
+  const [filterSubject, setFilterSubject] = useState("Todas");
+  const [sortBy, setSortBy] = useState<"accuracy" | "questions" | "hours">("accuracy");
+
+  // Agrupa por tópico — usa objeto em vez de Map para compatibilidade com ES5
+  const topics: TopicStat[] = useMemo(() => {
+    const topicObj: Record<string, TopicStat> = {};
+    for (const s of sessions) {
+      if (!s.topicName?.trim()) continue;
+      const key = `${s.subjectName}|||${s.topicName}`;
+      if (!topicObj[key]) {
+        topicObj[key] = { topicName: s.topicName, subjectName: s.subjectName, questions: 0, correct: 0, wrong: 0, hours: 0, accuracy: null, level: "sem_dados" };
+      }
+      topicObj[key].questions += s.questions;
+      topicObj[key].correct   += s.correct;
+      topicObj[key].wrong     += s.wrong;
+      topicObj[key].hours     += s.hours;
+    }
+    return Object.values(topicObj).map(t => {
+      const acc = t.questions > 0 ? Math.round((t.correct / t.questions) * 100) : null;
+      const level: TopicStat["level"] = acc === null ? "sem_dados"
+        : acc < 60 ? "critica"
+        : acc < 75 ? "atencao"
+        : "ok";
+      return { ...t, accuracy: acc, level };
+    });
+  }, [sessions]);
+
+  const subjects = ["Todas", ...Array.from(new Set(topics.map(t => t.subjectName))).sort()];
+  const filtered = topics
+    .filter(t => filterSubject === "Todas" || t.subjectName === filterSubject)
+    .sort((a, b) => {
+      if (sortBy === "accuracy") {
+        const aVal = a.accuracy ?? 101; const bVal = b.accuracy ?? 101;
+        return aVal - bVal;
+      }
+      if (sortBy === "questions") return b.questions - a.questions;
+      return b.hours - a.hours;
+    });
+
+  const criticos  = topics.filter(t => t.level === "critica").length;
+  const atencao   = topics.filter(t => t.level === "atencao").length;
+  const ok        = topics.filter(t => t.level === "ok").length;
+
+  const LEVEL = {
+    critica:   { label: "Crítico",  bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500"    },
+    atencao:   { label: "Atenção",  bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-500" },
+    ok:        { label: "Ok",       bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500"  },
+    sem_dados: { label: "Sem dados",bg: "bg-gray-100",   text: "text-gray-500",   dot: "bg-gray-300"   },
+  };
+
+  if (topics.length === 0) return (
+    <EmptyCard icon={Map} title="Nenhum tópico com dados ainda"
+      description="Registre sessões de estudo com o campo Tópico preenchido para ver o mapa de dificuldades." />
   );
 
   return (
     <div className="space-y-4">
-      <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-          <span className="font-medium">Horas de Estudo</span>
-          <span className="font-semibold text-gray-700">
-            {fmtH(weekTotalHours)}{horasMeta > 0 ? ` / ${fmtH(horasMeta)}` : ""}
-          </span>
-        </div>
-        <Bar pct={pctHoras} color={BG} />
-      </div>
-      <div>
-        <div className="flex justify-between text-xs text-gray-500 mb-1.5">
-          <span className="font-medium">Questões</span>
-          <div className="flex items-center gap-1.5">
-            {editingQ ? (
-              <div className="flex items-center gap-1">
-                <input
-                  autoFocus
-                  type="number" min="1" value={inputQ}
-                  onChange={e => setInputQ(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") saveMetaQ(); if (e.key === "Escape") setEditingQ(false); }}
-                  className="w-16 text-center text-xs border border-gray-300 rounded-lg px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-gray-900"
-                  placeholder={String(metaQ)}
-                />
-                <button onClick={saveMetaQ}
-                  className="text-[10px] text-white px-1.5 py-0.5 rounded bg-gray-900 font-bold">✓</button>
-                <button onClick={() => setEditingQ(false)}
-                  className="text-[10px] text-gray-400 hover:text-gray-600">✕</button>
-              </div>
-            ) : (
-              <>
-                <span className="font-semibold text-gray-700">{weekTotalQ} / {metaQ}</span>
-                <button onClick={() => { setInputQ(String(metaQ)); setEditingQ(true); }}
-                  title="Editar meta de questões"
-                  className="text-gray-300 hover:text-gray-500 transition-colors">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                </button>
-              </>
-            )}
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Críticos", value: criticos, color: "text-red-600",    bg: "bg-red-50"    },
+          { label: "Atenção",  value: atencao,  color: "text-yellow-600", bg: "bg-yellow-50" },
+          { label: "Ok",       value: ok,       color: "text-green-600",  bg: "bg-green-50"  },
+        ].map(({ label, value, color, bg }) => (
+          <div key={label} className={`${bg} rounded-xl p-3 text-center`}>
+            <p className={`text-2xl font-bold ${color}`}>{value}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{label}</p>
           </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-2 flex-wrap items-center">
+        <select value={filterSubject} onChange={e => setFilterSubject(e.target.value)}
+          className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-gray-900">
+          {subjects.map(s => <option key={s}>{s}</option>)}
+        </select>
+        <div className="flex gap-1">
+          {([["accuracy","Menor acerto"],["questions","Mais questões"],["hours","Mais horas"]] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setSortBy(k)}
+              className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${sortBy === k ? "bg-gray-900 text-white border-gray-900" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
+              {l}
+            </button>
+          ))}
         </div>
-        <Bar pct={pctQ} color="#8B5CF6" />
+      </div>
+
+      {/* Lista de tópicos */}
+      <div className="space-y-2">
+        {filtered.map((t, i) => {
+          const cfg = LEVEL[t.level];
+          return (
+            <div key={i} className="bg-white rounded-xl border border-gray-200 px-4 py-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot}`} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{t.topicName}</p>
+                    <p className="text-xs text-gray-400">{t.subjectName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4 shrink-0 text-right">
+                  <div className="text-xs text-gray-500">
+                    <p className="font-medium text-gray-700">{t.questions > 0 ? t.questions : "—"}</p>
+                    <p>questões</p>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    <p className="font-medium text-gray-700">{fmtH(t.hours)}</p>
+                    <p>horas</p>
+                  </div>
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${cfg.bg} ${cfg.text} min-w-[52px] text-center`}>
+                    {t.accuracy !== null ? `${t.accuracy}%` : "—"}
+                  </span>
+                </div>
+              </div>
+              {/* Barra de acurácia */}
+              {t.accuracy !== null && (
+                <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${t.accuracy >= 75 ? "bg-green-500" : t.accuracy >= 60 ? "bg-yellow-500" : "bg-red-500"}`}
+                    style={{ width: `${t.accuracy}%` }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-export default function DashboardPage() {
-  const { data: session } = useSession();
-  const [stats,      setStats]      = useState<Stats | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
+// ── PÁGINA PRINCIPAL ─────────────────────────────────────────────────────────
+type Tab = "visao_geral" | "mapa_dificuldades";
+
+export default function EstatisticasPage() {
+  const [data,     setData]     = useState<Stats | null>(null);
+  const [sessions, setSessions] = useState<HistoricoSession[]>([]);
+  const [loading,  setLoading]  = useState(true);
+  const [tab,      setTab]      = useState<Tab>("visao_geral");
 
   useEffect(() => {
-    fetch("/api/statistics")
-      .then(r => r.json())
-      .then(setStats)
-      .catch(console.error)
+    Promise.all([
+      fetch("/api/statistics").then(r => r.json()),
+      fetch("/api/historico").then(r => r.json()),
+    ]).then(([stats, historico]) => {
+      setData(stats);
+      if (Array.isArray(historico)) {
+        const all: HistoricoSession[] = historico.flatMap((d: any) => d.sessions ?? []);
+        setSessions(all);
+      }
+    }).catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
-  const currentWeek   = stats?.weeksData?.find(w => w.weekOffset === weekOffset);
-  const chartData     = currentWeek?.days ?? [];
-  const weekLabel     = currentWeek ? `${fmtDate(currentWeek.startDate)} – ${fmtDate(currentWeek.endDate)}` : "";
-  const maxWeekOffset = (stats?.weeksData?.length ?? 1) - 1;
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+  if (!data) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center text-red-500">
+      Erro ao carregar estatísticas.
+    </div>
+  );
 
-  // Metas semanais — soma da semana atual (weekOffset=0)
-  const currentWeekData = stats?.weeksData?.find(w => w.weekOffset === 0);
-  const weekTotalHours  = currentWeekData?.days.reduce((a, d) => a + d.hours, 0) ?? 0;
-  const weekTotalQ      = currentWeekData?.days.reduce((a, d) => a + d.questions, 0) ?? 0;
+  const hasStudyData   = data.totalHours > 0 || data.totalQuestions > 0;
+  const hasQuestions   = data.totalQuestions > 0;
+  const hasWeeklyData  = data.weeklyHours.some(d => d.hours > 0);
+  const hasSubjectData = data.subjectStats.some(s => s.hours > 0);
+  const hasQuestData   = data.subjectStats.some(s => s.questions > 0);
+
+  const accuracyDisplay = hasQuestions ? `${(data.accuracy ?? 0).toFixed(1)}%` : "—";
+  const accuracyColor   = hasQuestions
+    ? (data.accuracy ?? 0) >= 70 ? "text-green-600"
+      : (data.accuracy ?? 0) >= 50 ? "text-yellow-600" : "text-red-600"
+    : "text-gray-400";
+
+  const lineData = [...(data.weeksData ?? [])].reverse().map(w => ({
+    label: `${fmtDate(w.startDate)}`,
+    horas: parseFloat(w.days.reduce((a, d) => a + d.hours, 0).toFixed(1)),
+    questoes: w.days.reduce((a, d) => a + d.questions, 0),
+  }));
+
+  const desempenhoData = data.subjectStats
+    .filter(s => s.questions > 0)
+    .map(s => ({ name: s.name, correct: s.correct, wrong: s.wrong }));
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div
-        className="text-white px-8"
-        style={{ backgroundColor: BG, minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}
-      >
-        <p className="text-sm" style={{ color: "rgba(255,255,255,0.6)" }}>Bem-vindo de volta,</p>
-        <h1 className="text-3xl font-bold mt-0.5">{session?.user?.name ?? "Concurseiro"} 👋</h1>
+      <div className="text-white px-8" style={{ backgroundColor: "#1B4040", minHeight: "124px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <h1 className="text-3xl font-bold">Estatísticas</h1>
+        <p className="text-gray-400 text-sm mt-1">Seu desempenho completo</p>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200 bg-white sticky top-0 z-10">
+        <div className="max-w-6xl mx-auto px-6 flex gap-0">
+          {([
+            ["visao_geral",       "Visão Geral",          TrendingUp],
+            ["mapa_dificuldades", "Mapa de Dificuldades", Map],
+          ] as const).map(([key, label, Icon]) => (
+            <button key={key} onClick={() => setTab(key)}
+              className={`flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 transition-colors ${
+                tab === key ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}>
+              <Icon className="w-4 h-4" />{label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
-        {/* ── KPIs topo ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            {
-              label: "Tempo de Estudo",
-              value: stats ? fmtH(stats.totalHours) : "—",
-              color: "text-gray-900",
-            },
-            {
-              label: "Desempenho",
-              sub:   stats && stats.totalQuestions > 0
-                ? `${stats.totalCorrect} Acertos · ${stats.totalWrong} Erros`
-                : "sem dados",
-              value: stats?.accuracy !== null && stats?.accuracy !== undefined
-                ? `${stats.accuracy}%` : "—",
-              color: stats?.accuracy !== null && stats?.accuracy !== undefined
-                ? stats.accuracy >= 70 ? "text-green-600"
-                  : stats.accuracy >= 50 ? "text-yellow-600"
-                  : "text-red-600"
-                : "text-gray-400",
-            },
-            {
-              label: "Progresso no Edital",
-              sub:   stats ? `${stats.completedPdfs} concluídos · ${stats.totalPdfs - stats.completedPdfs} pendentes` : "",
-              value: stats && stats.totalPdfs > 0
-                ? `${Math.round((stats.completedPdfs / stats.totalPdfs) * 100)}%` : "—",
-              color: "text-gray-900",
-            },
-            {
-              label: "Revisões Pendentes",
-              value: stats?.pendingReviews ?? "—",
-              sub:   stats?.lateReviews ? `${stats.lateReviews} atrasadas` : "em dia",
-              color: (stats?.lateReviews ?? 0) > 0 ? "text-red-600" : "text-gray-900",
-            },
-          ].map(({ label, value, sub, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-              {sub && <p className="text-xs text-gray-500 mb-1">{sub}</p>}
-              <p className={`text-3xl font-bold ${color}`}>{value}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Constância ── */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-            <div className="flex items-center gap-2">
-              <Flame className="w-5 h-5 text-orange-500" />
-              <h2 className="text-base font-semibold">Constância nos estudos</h2>
-            </div>
-            {stats && (
-              <div className="flex items-center gap-4 text-sm flex-wrap">
-                <span className="flex items-center gap-1.5 font-semibold text-orange-500">
-                  <Flame className="w-4 h-4" />
-                  {stats.streak === 1 ? "1 dia seguido" : `${stats.streak} dias seguidos`}
-                </span>
-                <span className="text-gray-400">{stats.studiedDays} de {stats.totalDays} dias estudados</span>
-                <span className={`font-semibold ${stats.consistency >= 70 ? "text-green-600" : stats.consistency >= 40 ? "text-yellow-600" : "text-red-600"}`}>
-                  {stats.consistency}% constância
-                </span>
+        {tab === "visao_geral" && (<>
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              ["Horas líquidas",     `${data.totalHours.toFixed(1)}h`,         "text-gray-900"],
+              ["Questões",           data.totalQuestions,                       "text-gray-900"],
+              ["% Acertos",          accuracyDisplay,                           accuracyColor],
+              ["Erros",              data.totalWrong,                           data.totalWrong > 0 ? "text-red-600" : "text-gray-900"],
+              ["PDFs concluídos",    `${data.completedPdfs}/${data.totalPdfs}`, "text-gray-900"],
+              ["Erros pendentes",    data.pendingErrors,                        data.pendingErrors > 0 ? "text-red-600" : "text-gray-900"],
+              ["Revisões pendentes", data.pendingReviews,                       "text-gray-900"],
+              ["Revisões atrasadas", data.lateReviews,                          data.lateReviews > 0 ? "text-red-600" : "text-gray-900"],
+            ].map(([l, v, c]) => (
+              <div key={l as string} className="bg-white rounded-xl border border-gray-200 px-5 py-4">
+                <p className="text-xs text-gray-500 mb-1">{l}</p>
+                <p className={`text-3xl font-bold ${c}`}>{v}</p>
               </div>
+            ))}
+          </div>
+
+          {/* Disciplinas × Horas */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <p className="text-sm font-bold uppercase tracking-wide text-gray-500 mb-5">Disciplinas × Horas de Estudo</p>
+            {!hasSubjectData ? (
+              <EmptyCard icon={BookOpen} title="Nenhuma hora por disciplina ainda"
+                description="Após registrar sessões vinculadas a disciplinas, o gráfico aparecerá aqui." />
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(200, data.subjectStats.filter(s => s.hours > 0).length * 52)}>
+                <BarChart data={data.subjectStats.filter(s => s.hours > 0).sort((a, b) => b.hours - a.hours)}
+                  layout="vertical" margin={{ top: 0, right: 80, left: 10, bottom: 0 }} barSize={28}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={v => `${v}h`} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#374151" }} width={160} />
+                  <Tooltip content={<HorasTooltip />} />
+                  <Bar dataKey="hours" fill="#10B981" radius={[0, 6, 6, 0]}
+                    label={{ position: "right", formatter: (v: number) => fmtH(v), fontSize: 11, fill: "#374151", fontWeight: 600 }} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {stats?.consistencyDots.map((dot, i) => {
-              const isFuture = dot.date > new Date().toISOString().slice(0,10);
+
+          {/* Disciplinas × Desempenho */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <p className="text-sm font-bold uppercase tracking-wide text-gray-500 mb-1">Disciplinas × Desempenho</p>
+            <p className="text-xs text-gray-400 mb-5">Acertos (verde) e Erros (vermelho) por disciplina</p>
+            {!hasQuestData ? (
+              <EmptyCard icon={Target} title="Nenhuma questão registrada por disciplina"
+                description="Resolva questões nas sessões de estudo para ver o desempenho por disciplina." />
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(280, desempenhoData.length * 52)}>
+                <BarChart data={desempenhoData} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }} barSize={28}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 12, fill: "#374151" }} width={160} />
+                  <Tooltip content={<DesempenhoTooltip />} />
+                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
+                    formatter={(v: string) => v === "correct" ? "Acertos" : "Erros"} />
+                  <Bar dataKey="correct" stackId="q" fill="#10B981" name="correct" />
+                  <Bar dataKey="wrong"   stackId="q" fill="#EF4444" name="wrong" radius={[0, 6, 6, 0]}
+                    label={{ position: "right", formatter: (_: number, __: string, props: any) => {
+                      const total = (props?.correct ?? 0) + (props?.wrong ?? 0);
+                      return total > 0 ? total : "";
+                    }, fontSize: 11, fill: "#374151", fontWeight: 600 }} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Evolução semanal */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <p className="text-sm font-bold uppercase tracking-wide text-gray-500 mb-1">Evolução Semanal</p>
+            <p className="text-xs text-gray-400 mb-5">Horas e questões nas últimas 8 semanas</p>
+            {lineData.every(d => d.horas === 0) ? (
+              <EmptyCard icon={TrendingUp} title="Dados insuficientes"
+                description="Estude por pelo menos 2 semanas para ver a evolução temporal." />
+            ) : (
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={lineData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#6B7280" }} />
+                  <YAxis yAxisId="horas" tick={{ fontSize: 11 }} tickFormatter={v => `${v}h`} />
+                  <YAxis yAxisId="questoes" orientation="right" tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v: number, name: string) => name === "horas" ? [fmtH(v), "Horas"] : [v, "Questões"]} />
+                  <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12 }}
+                    formatter={(v: string) => v === "horas" ? "Horas" : "Questões"} />
+                  <Line yAxisId="horas"    type="monotone" dataKey="horas"    stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: "#10B981" }} activeDot={{ r: 6 }} name="horas" />
+                  <Line yAxisId="questoes" type="monotone" dataKey="questoes" stroke="#8B5CF6" strokeWidth={2.5} dot={{ r: 4, fill: "#8B5CF6" }} activeDot={{ r: 6 }} name="questoes" strokeDasharray="5 3" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Horas semana atual */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <p className="text-sm font-bold uppercase tracking-wide text-gray-500 mb-4">Horas Esta Semana</p>
+            {!hasWeeklyData ? (
+              <EmptyCard icon={BookOpen} title="Nenhuma hora registrada esta semana"
+                description="Registre sessões de estudo para ver sua evolução semanal aqui."
+                action={{ label: "Iniciar sessão", href: "/sessao" }} />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={data.weeklyHours} margin={{ top: 24, right: 10, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} domain={[0, 'auto']} />
+                  <Tooltip formatter={(v: number) => [fmtH(v), "Horas"]} />
+                  <Bar dataKey="hours" fill="#1B4040" radius={[4, 4, 0, 0]} maxBarSize={48}
+                    label={{ position: "top", fontSize: 10, fill: "#6B7280", formatter: (v: number) => v > 0 ? fmtH(v) : "" }} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* Donuts */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {[
+              { title: "Aproveitamento", data: [{ name: "Acertos", value: (data.totalQuestions ?? 0) - (data.totalWrong ?? 0) }, { name: "Erros", value: data.totalWrong ?? 0 }], colors: ["#10B981", "#EF4444"], emptyMsg: "Resolva questões para ver seu aproveitamento." },
+              { title: "Erros",          data: [{ name: "Pendentes", value: data.pendingErrors ?? 0 }, { name: "Resolvidos", value: data.resolvedErrors ?? 0 }], colors: ["#EF4444", "#10B981"], emptyMsg: "Nenhum erro registrado ainda." },
+              { title: "PDFs",           data: [{ name: "Concluídos", value: data.completedPdfs ?? 0 }, { name: "Pendentes", value: (data.totalPdfs ?? 0) - (data.completedPdfs ?? 0) }], colors: ["#1B4040", "#D1D5DB"], emptyMsg: "Cadastre PDFs nas matérias." },
+            ].map(({ title, data: d, colors, emptyMsg }) => {
+              const total = d.reduce((a, x) => a + x.value, 0);
               return (
-                <div key={i} title={dot.date}
-                  className={`w-6 h-6 rounded-md flex items-center justify-center ${
-                    dot.studied    ? "bg-green-500"
-                    : isFuture     ? "bg-gray-100"
-                    : "bg-red-400"
-                  }`}>
-                  {dot.studied && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                  {!dot.studied && !isFuture && <span className="text-white font-bold text-[10px]">✕</span>}
+                <div key={title} className="bg-white rounded-2xl border border-gray-200 p-6">
+                  <p className="text-base font-semibold mb-2">{title}</p>
+                  {total === 0 ? (
+                    <div className="h-36 flex flex-col items-center justify-center text-center gap-2 px-2">
+                      <Target className="w-6 h-6 text-gray-300" />
+                      <p className="text-xs text-gray-400 leading-relaxed">{emptyMsg}</p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={160}>
+                      <PieChart>
+                        <Pie data={d} cx="50%" cy="50%" innerRadius={45} outerRadius={65} dataKey="value" paddingAngle={3}>
+                          {d.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+                        </Pie>
+                        <Legend iconSize={10} />
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               );
             })}
-            {!stats && Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className="w-6 h-6 rounded-md bg-gray-100 animate-pulse" />
-            ))}
-          </div>
-          <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Estudou</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" /> Não estudou</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-gray-100 border border-gray-200 inline-block" /> Futuro</span>
-          </div>
-        </div>
-
-        {/* ── Painel disciplinas + coluna direita ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-          {/* Tabela disciplinas */}
-          <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-base font-semibold">Painel por Disciplina</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                    <th className="text-left px-5 py-3 font-semibold">Disciplina</th>
-                    <th className="text-right px-3 py-3 font-semibold">Tempo</th>
-                    <th className="text-right px-3 py-3 font-semibold text-green-600">✓</th>
-                    <th className="text-right px-3 py-3 font-semibold text-red-500">✗</th>
-                    <th className="text-right px-3 py-3 font-semibold">Total</th>
-                    <th className="text-right px-5 py-3 font-semibold">%</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {stats?.subjectStats.map(s => (
-                    <tr key={s.name} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3 font-medium" style={{ color: BG }}>{s.name}</td>
-                      <td className="px-3 py-3 text-right text-gray-600">
-                        {s.hours > 0 ? fmtH(s.hours) : <span className="text-gray-300">-</span>}
-                      </td>
-                      <td className="px-3 py-3 text-right text-green-600 font-semibold">
-                        {s.correct > 0 ? s.correct : <span className="text-gray-300">0</span>}
-                      </td>
-                      <td className="px-3 py-3 text-right text-red-500 font-semibold">
-                        {s.wrong > 0 ? s.wrong : <span className="text-gray-300">0</span>}
-                      </td>
-                      <td className="px-3 py-3 text-right text-gray-600">
-                        {s.questions > 0 ? s.questions : <span className="text-gray-300">-</span>}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        {s.accuracy !== null ? (
-                          <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${
-                            s.accuracy >= 70 ? "bg-green-100 text-green-700"
-                            : s.accuracy >= 50 ? "bg-yellow-100 text-yellow-700"
-                            : "bg-red-100 text-red-700"
-                          }`}>{s.accuracy}%</span>
-                        ) : <span className="text-gray-300 text-xs">-</span>}
-                      </td>
-                    </tr>
-                  ))}
-                  {!stats && Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <td key={j} className="px-3 py-3">
-                          <div className="h-4 bg-gray-100 rounded animate-pulse" />
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
           </div>
 
-          {/* Coluna direita */}
-          <div className="space-y-4">
-
-            {/* Metas semanal — calculadas da semana atual */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Metas de Estudo Semanal</h2>
-              {!stats ? (
-                <div className="space-y-3">
-                  {[1,2].map(i => <div key={i} className="h-6 bg-gray-100 rounded animate-pulse" />)}
-                </div>
-              ) : (
-                <MetasSemanal weekTotalHours={weekTotalHours} weekTotalQ={weekTotalQ} weeklyGoalHours={stats.weeklyGoalHours ?? 0} userId={session?.user?.id ?? undefined} />
-              )}
-            </div>
-
-            {/* Gráfico semanal com acertos/erros empilhados */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudo Semanal</h2>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setWeekOffset(w => Math.min(w + 1, maxWeekOffset))}
-                    disabled={weekOffset >= maxWeekOffset}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5 text-gray-500" />
-                  </button>
-                  <span className="text-xs text-gray-500 min-w-[80px] text-center">{weekLabel}</span>
-                  <button
-                    onClick={() => setWeekOffset(w => Math.max(w - 1, 0))}
-                    disabled={weekOffset === 0}
-                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                  >
-                    <ChevronRight className="w-3.5 h-3.5 text-gray-500" />
-                  </button>
-                </div>
+          {/* Erros críticos */}
+          {data.criticalErrors.length > 0 && (
+            <div className="bg-white rounded-2xl border border-gray-200 p-6">
+              <p className="text-base font-semibold mb-4">Erros mais críticos</p>
+              <div className="space-y-2">
+                {data.criticalErrors.map((e, i) => (
+                  <div key={i} className="flex items-start justify-between gap-4 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{stripHtml(e.title)}</p>
+                      <p className="text-xs text-gray-500">{e.subject}</p>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full font-medium ${e.difficulty === "Alta" ? "bg-red-100 text-red-700" : e.difficulty === "Media" ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+                        {e.difficulty}
+                      </span>
+                      <span className="text-red-600 font-semibold">Errou {e.wrongCount}x</span>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Botões Tempo / Questões */}
-              <div className="flex gap-2 mb-3">
-                <button
-                  onClick={() => setChartMode("hours")}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
-                  style={chartMode === "hours"
-                    ? { backgroundColor: BG, color: "#fff" }
-                    : { backgroundColor: "#F3F4F6", color: "#6B7280" }}
-                >
-                  Tempo
-                </button>
-                <button
-                  onClick={() => setChartMode("questions")}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold transition-colors"
-                  style={chartMode === "questions"
-                    ? { backgroundColor: "#10B981", color: "#fff" }
-                    : { backgroundColor: "#F3F4F6", color: "#6B7280" }}
-                >
-                  Questões
-                </button>
-              </div>
-
-              {chartData.length > 0 ? (
-                chartMode === "hours" ? (
-                  // Modo Tempo — barra simples
-                  <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={(v: number) => [`${v.toFixed(1)}h`, "Horas"]} />
-                      <Bar dataKey="hours" radius={[3,3,0,0]} fill={BG}
-                        label={{ position: "top", fontSize: 9, fill: "#6B7280",
-                          formatter: (v: number) => v > 0 ? `${v.toFixed(1)}h` : "" }} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : (
-                  // Modo Questões — barras empilhadas: acertos (verde) + erros (vermelho)
-                  <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
-                      <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
-                      <Tooltip
-                        formatter={(v: number, name: string) => [
-                          v,
-                          name === "correct" ? "Acertos" : name === "wrong" ? "Erros" : "Questões",
-                        ]}
-                      />
-                      <Bar dataKey="correct" stackId="q" fill="#22c55e" name="correct"
-                        radius={[0,0,0,0]} />
-                      <Bar dataKey="wrong" stackId="q" fill="#ef4444" name="wrong"
-                        radius={[3,3,0,0]}
-                        label={{ position: "top", fontSize: 9, fill: "#6B7280",
-                          formatter: (_: number, __: string, props: any) => {
-                            const total = (props?.correct ?? 0) + (props?.wrong ?? 0);
-                            return total > 0 ? total : "";
-                          }}} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )
-              ) : (
-                <div className="h-36 flex items-center justify-center text-xs text-gray-400">
-                  Sem registros nesta semana
-                </div>
-              )}
-
-              {/* Legenda do gráfico de questões */}
-              {chartMode === "questions" && (
-                <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Acertos</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Erros</span>
-                </div>
-              )}
             </div>
+          )}
+        </>)}
 
-            {/* Estudos do dia */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Estudos do Dia</h2>
-                {stats && stats.todayHours > 0 && (
-                  <span className="text-xs font-semibold" style={{ color: BG }}>{fmtH(stats.todayHours)}</span>
-                )}
-              </div>
-              {stats?.todayBySubject && stats.todayBySubject.length > 0 ? (
-                <ResponsiveContainer width="100%" height={170}>
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                    <Pie
-                      data={stats.todayBySubject}
-                      dataKey="hours"
-                      nameKey="name"
-                      cx="50%"
-                      cy="42%"
-                      innerRadius={42}
-                      outerRadius={62}
-                      paddingAngle={2}
-                    >
-                      {stats.todayBySubject.map((entry, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(v: number, name: string) => [fmtH(v), name]}
-                    />
-                    <Legend
-                      iconSize={8}
-                      iconType="circle"
-                      wrapperStyle={{ fontSize: 10, paddingTop: 4 }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-36 flex flex-col items-center justify-center text-center gap-2">
-                  <BookOpen className="w-6 h-6 text-gray-200" />
-                  <p className="text-xs text-gray-400">Nenhuma sessão hoje</p>
-                  <Link href="/sessao"
-                    className="text-xs text-white px-3 py-1.5 rounded-lg"
-                    style={{ backgroundColor: BG }}>
-                    Iniciar sessão
-                  </Link>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Revisões pendentes ── */}
-        {stats && stats.pendingReviews > 0 && (
+        {tab === "mapa_dificuldades" && (
           <div className="bg-white rounded-2xl border border-gray-200 p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-semibold flex items-center gap-2">
-                <RefreshCw className="w-4 h-4 text-blue-500" />
-                Revisões
-              </h2>
-              <Link href="/revisoes" className="text-xs text-blue-600 hover:underline">Ver todas</Link>
+            <div className="mb-5">
+              <h2 className="text-base font-bold text-gray-900">Mapa de Dificuldades por Tópico</h2>
+              <p className="text-xs text-gray-400 mt-1">
+                Baseado nas sessões de estudo com tópico preenchido. Crítico &lt;60% · Atenção 60-75% · Ok ≥75%
+              </p>
             </div>
-            <div className="flex gap-4">
-              {[
-                { label: "Atrasadas", value: stats.lateReviews,                       color: "text-red-600"  },
-                { label: "Pendentes", value: stats.pendingReviews - stats.lateReviews, color: "text-blue-600" },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="bg-gray-50 rounded-xl px-5 py-3 text-center">
-                  <p className="text-xs text-gray-400 mb-1">{label}</p>
-                  <p className={`text-2xl font-bold ${color}`}>{value}</p>
-                </div>
-              ))}
-            </div>
+            <MapaDificuldades sessions={sessions} />
           </div>
         )}
-
-        {/* ── Método Davi Lago ── */}
-        <div className="text-white rounded-2xl p-6" style={{ backgroundColor: BG }}>
-          <h2 className="text-base font-semibold mb-4">💡 Método de estudo — Davi Lago</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {[
-              { title: "Leitura ativa",      desc: "Leia o PDF com atenção, anote dúvidas e marque os pontos principais." },
-              { title: "Questões imediatas", desc: "Após cada tópico, resolva questões. Registre erros no Caderno de Erros." },
-              { title: "Revisão espaçada",   desc: "Revise em 24h, 7 dias e 30 dias. O sistema agenda automaticamente." },
-            ].map(tip => (
-              <div key={tip.title} className="rounded-xl p-4" style={{ backgroundColor: "rgba(255,255,255,0.1)" }}>
-                <p className="font-semibold text-sm mb-1">{tip.title}</p>
-                <p className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.6)" }}>{tip.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
       </div>
     </div>
   );

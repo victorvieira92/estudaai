@@ -129,11 +129,47 @@ export async function GET() {
   const studiedDays  = sessionDatesBR.size;
   const consistency  = Math.round((studiedDays / totalDays) * 100);
 
-  const consistencyDots: { date: string; studied: boolean }[] = [];
+  // Mapa data → sessões (subjectId) para calcular parcial/completo
+  const dateToSubjectSessions: Record<string, string[]> = {};
+  allSessions.forEach(s => {
+    const ds = toBRDate(new Date(s.createdAt));
+    if (!dateToSubjectSessions[ds]) dateToSubjectSessions[ds] = [];
+    if (s.subjectId) dateToSubjectSessions[ds].push(s.subjectId);
+  });
+
+  // Calcula status de cada dia: done | partial | none
+  // Dia da semana → idx do ciclo: seg(1)=0, ter(2)=1, qua(3)=2, qui(4)=3, sex(5)=4, sab(6)=5, dom(0)=6
+  function jsDoWtoCycleIdx(dow: number): number { return dow === 0 ? 6 : dow - 1; }
+  function getDayStatus(ds: string): "done" | "partial" | "none" {
+    const sessions = dateToSubjectSessions[ds] ?? [];
+    if (!sessions.length) return "none";
+    const d = new Date(ds + "T12:00:00Z");
+    const dow = d.getUTCDay();
+    const idx = jsDoWtoCycleIdx(dow);
+    const dayBlocks = studyBlocks.filter(b => b.dayOfWeek === idx && b.subjectId);
+    if (!dayBlocks.length) return sessions.length > 0 ? "done" : "none";
+    // Conta quantos blocos foram cobertos (1 sessão por bloco da mesma matéria)
+    const sessCount: Record<string, number> = {};
+    sessions.forEach(sid => { sessCount[sid] = (sessCount[sid] ?? 0) + 1; });
+    const used: Record<string, number> = {};
+    let covered = 0;
+    dayBlocks.forEach(b => {
+      if (!b.subjectId) return;
+      const avail = sessCount[b.subjectId] ?? 0;
+      const u = used[b.subjectId] ?? 0;
+      if (u < avail) { covered++; used[b.subjectId] = u + 1; }
+    });
+    if (covered >= dayBlocks.length) return "done";
+    if (covered > 0) return "partial";
+    return "none";
+  }
+
+  const consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" }[] = [];
   const daysToShow = Math.min(totalDays, 90);
   for (let i = daysToShow - 1; i >= 0; i--) {
     const ds = toBRDate(new Date(todayMs - i * msPerDay));
-    consistencyDots.push({ date: ds, studied: sessionDatesBR.has(ds) });
+    const status = getDayStatus(ds);
+    consistencyDots.push({ date: ds, studied: status !== "none", status });
   }
 
   // ── Estudos de hoje ───────────────────────────────────────────────────────
