@@ -164,11 +164,20 @@ export async function GET() {
     return "none";
   }
 
+  // Lê overrides manuais do UserCycleState
+  const cycleState = await prisma.userCycleState.findUnique({ where: { userId: uid } });
+  let dotOverrides: Record<string, "done" | "partial" | "none"> = {};
+  try {
+    const parsed = JSON.parse(cycleState?.pendingBlocks ?? "{}");
+    dotOverrides = parsed?.dotOverrides ?? {};
+  } catch { dotOverrides = {}; }
+
   const consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" }[] = [];
   const daysToShow = Math.min(totalDays, 90);
   for (let i = daysToShow - 1; i >= 0; i--) {
     const ds = toBRDate(new Date(todayMs - i * msPerDay));
-    const status = getDayStatus(ds);
+    // Override manual tem prioridade sobre cálculo automático
+    const status = dotOverrides[ds] ?? getDayStatus(ds);
     consistencyDots.push({ date: ds, studied: status !== "none", status });
   }
 
@@ -253,4 +262,35 @@ export async function GET() {
     weeksData,
     weeklyGoalHours,
   });
+}
+
+export async function PATCH(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+  const uid = session.user.id as string;
+
+  const { date, status } = await req.json();
+  if (!date || !status) return NextResponse.json({ error: "date e status obrigatórios." }, { status: 400 });
+
+  // Lê estado atual
+  const cycleState = await prisma.userCycleState.findUnique({ where: { userId: uid } });
+  let payload: any = {};
+  try { payload = JSON.parse(cycleState?.pendingBlocks ?? "{}"); } catch {}
+
+  if (!payload.dotOverrides) payload.dotOverrides = {};
+
+  if (status === "auto") {
+    // Remove override — volta ao cálculo automático
+    delete payload.dotOverrides[date];
+  } else {
+    payload.dotOverrides[date] = status;
+  }
+
+  await prisma.userCycleState.upsert({
+    where:  { userId: uid },
+    create: { userId: uid, currentDayIdx: 0, pendingBlocks: JSON.stringify(payload), lastDate: "" },
+    update: { pendingBlocks: JSON.stringify(payload) },
+  });
+
+  return NextResponse.json({ ok: true });
 }

@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
-  CheckCircle, Flame, RefreshCw, BookOpen,
+  CheckCircle, Flame, RefreshCw, BookOpen, Pencil,
   ChevronLeft, ChevronRight,
 } from "lucide-react";
 import {
@@ -156,6 +156,20 @@ export default function DashboardPage() {
   const [loading,    setLoading]    = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
+  const [dotEditMode, setDotEditMode] = useState(false);
+  const [savingDot,   setSavingDot]   = useState<string | null>(null);
+
+  const saveDotOverride = async (date: string, status: "done" | "partial" | "none" | "auto") => {
+    setSavingDot(date);
+    await fetch("/api/statistics", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, status }),
+    }).catch(console.error);
+    const newStats = await fetch("/api/statistics").then(r => r.json()).catch(() => null);
+    if (newStats) setStats(newStats);
+    setSavingDot(null);
+  };
 
   useEffect(() => {
     fetch("/api/statistics")
@@ -248,12 +262,58 @@ export default function DashboardPage() {
                 <span className={`font-semibold ${stats.consistency >= 70 ? "text-green-600" : stats.consistency >= 40 ? "text-yellow-600" : "text-red-600"}`}>
                   {stats.consistency}% constância
                 </span>
+                <button
+                  onClick={() => setDotEditMode(v => !v)}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${dotEditMode ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                  <Pencil className="w-3 h-3" />
+                  {dotEditMode ? "Concluir edição" : "Editar"}
+                </button>
               </div>
             )}
           </div>
+
+          {dotEditMode && (
+            <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+              Clique em qualquer dia para ajustar o status manualmente. Útil quando o planejamento mudou após o dia ter passado.
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-1.5">
             {stats?.consistencyDots.map((dot, i) => {
               const isFuture = dot.date > new Date().toISOString().slice(0,10);
+              const isSaving = savingDot === dot.date;
+              if (dotEditMode && !isFuture) {
+                return (
+                  <div key={i} className="relative group">
+                    <div
+                      title={`${dot.date} — clique para alterar`}
+                      className={`w-6 h-6 rounded-md flex items-center justify-center cursor-pointer ring-2 ring-offset-1 ring-teal-400 ${
+                        dot.status === "done"    ? "bg-green-500"
+                        : dot.status === "partial" ? "bg-yellow-400"
+                        : "bg-red-400"
+                      } ${isSaving ? "opacity-50" : ""}`}>
+                      {dot.status === "done"    && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                      {dot.status === "partial" && <span className="text-white font-bold text-[10px]">~</span>}
+                      {dot.status === "none"    && <span className="text-white font-bold text-[10px]">✕</span>}
+                    </div>
+                    {/* Mini menu ao hover */}
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 w-32">
+                      <p className="text-[10px] text-gray-400 font-medium mb-1 text-center">{dot.date.slice(5).replace("-", "/")}</p>
+                      {(["done", "partial", "none", "auto"] as const).map(s => (
+                        <button key={s} onClick={() => saveDotOverride(dot.date, s)}
+                          className={`text-[11px] px-2 py-1 rounded-lg font-medium transition-colors ${
+                            s === "done"    ? "bg-green-100 text-green-700 hover:bg-green-200"
+                            : s === "partial" ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+                            : s === "none"    ? "bg-red-100 text-red-700 hover:bg-red-200"
+                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}>
+                          {s === "done" ? "✓ Concluído" : s === "partial" ? "~ Parcial" : s === "none" ? "✕ Não estudou" : "↻ Automático"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div key={i} title={dot.date}
                   className={`w-6 h-6 rounded-md flex items-center justify-center ${
@@ -262,9 +322,9 @@ export default function DashboardPage() {
                     : dot.status === "partial" ? "bg-yellow-400"
                     : "bg-red-400"
                   }`}>
-                  {dot.status === "done" && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                  {dot.status === "done"    && <CheckCircle className="w-3.5 h-3.5 text-white" />}
                   {dot.status === "partial" && <span className="text-white font-bold text-[10px]">~</span>}
-                  {dot.status === "none" && !isFuture && <span className="text-white font-bold text-[10px]">✕</span>}
+                  {dot.status === "none"    && !isFuture && <span className="text-white font-bold text-[10px]">✕</span>}
                 </div>
               );
             })}
