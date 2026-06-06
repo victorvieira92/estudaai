@@ -31,6 +31,7 @@ const externalLinks = [
   { href: "https://www.estrategiaconcursos.com.br/app/dashboard/cursos", label: "Estratégia", icon: GraduationCap },
   { href: "https://onedrive.live.com/",                                  label: "OneDrive",   icon: Cloud         },
   { href: "https://notebooklm.google.com/notebook",                      label: "NotebookLM", icon: BookMarked    },
+  { href: "https://www.qconcursos.com/questoes-de-concursos/questoes",       label: "QConcursos", icon: ExternalLink  },
 ];
 
 const BG     = "#1B4040";

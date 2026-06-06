@@ -56,6 +56,9 @@ function SessaoContent() {
   // Questões
   const [correct,    setCorrect]    = useState("0");
   const [wrong,      setWrong]      = useState("0");
+  const [qInicial,   setQInicial]   = useState("");
+  const [qFinal,     setQFinal]     = useState("");
+  const [qErros,     setQErros]     = useState("");
   const [qStart,     setQStart]     = useState("");
   const [qEnd,       setQEnd]       = useState("");
 
@@ -122,7 +125,7 @@ function SessaoContent() {
   const resetForm = () => {
     setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicId("");
     setMaterial(""); setTheoryDone(false); setScheduleReview(false);
-    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQStart(""); setQEnd("");
+    setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQInicial(""); setQFinal(""); setQErros(""); setQStart(""); setQEnd("");
     setPages([{ id: uid(), start: "0", end: "0" }]);
     setVideos([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
     setComment(""); setDateMode("hoje"); setOtherDate("");
@@ -246,7 +249,7 @@ function SessaoContent() {
         }
       } catch { /* não bloqueia */ }
 
-      if (saveAndNew) resetForm();
+      resetForm(); // Limpa sempre após salvar
     } catch (e: any) {
       setError(e.message);
     } finally { setSaving(false); }
@@ -454,6 +457,18 @@ function SessaoContent() {
                   <p className="text-[9px] text-gray-400 mt-1">
                     {(() => { const s = parseInt(qStart)||0; const e = parseInt(qEnd)||0; return s>0&&e>=s ? `${e-s+1} questões` : ""; })()}
                   </p>
+                  <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mt-3 mb-2">Total + erros → acertos</p>
+                  <div className="flex items-center gap-1">
+                    <input type="number" min="0" placeholder="Total" value={calcTotal} onChange={e => setCalcTotal(e.target.value)}
+                      className={`${inputCls} text-gray-700 border-gray-200 text-sm w-2/5 py-0.5`} />
+                    <span className="text-gray-400 text-xs shrink-0">−</span>
+                    <input type="number" min="0" placeholder="Erros" value={calcErros} onChange={e => setCalcErros(e.target.value)}
+                      className={`${inputCls} text-gray-700 border-gray-200 text-sm w-2/5 py-0.5`} />
+                    <button type="button" onClick={() => {
+                        const t = parseInt(calcTotal)||0; const e = parseInt(calcErros)||0;
+                        if (t > 0) { setCorrect(String(Math.max(0, t-e))); setWrong(String(e)); }
+                      }} className="shrink-0 px-2 py-1 text-white text-[10px] font-bold rounded-lg" style={{ backgroundColor: "#1B4040" }}>OK</button>
+                  </div>
                 </div>
               </div>
 
