@@ -157,18 +157,51 @@ export default function DashboardPage() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [chartMode,  setChartMode]  = useState<"hours" | "questions">("hours");
   const [dotEditMode, setDotEditMode] = useState(false);
-  const [savingDot,   setSavingDot]   = useState<string | null>(null);
 
-  const saveDotOverride = async (date: string, status: "done" | "partial" | "none" | "auto") => {
-    setSavingDot(date);
-    await fetch("/api/statistics", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, status }),
-    }).catch(console.error);
-    const newStats = await fetch("/api/statistics").then(r => r.json()).catch(() => null);
-    if (newStats) setStats(newStats);
-    setSavingDot(null);
+
+  // Overrides pendentes — acumulados durante edição, enviados ao clicar "Concluir edição"
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, "done" | "partial" | "none" | "auto">>({});
+  const [savingOverrides, setSavingOverrides]   = useState(false);
+
+  const saveDotOverride = (date: string, status: "done" | "partial" | "none" | "auto") => {
+    // Acumula override local — sem tocar no servidor ainda
+    setPendingOverrides(prev => ({ ...prev, [date]: status }));
+
+    // Atualiza visual imediatamente
+    setStats(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        consistencyDots: prev.consistencyDots.map(dot => {
+          if (dot.date !== date) return dot;
+          const newStatus = status === "auto" ? dot.status : status as "done" | "partial" | "none";
+          return { ...dot, status: newStatus, studied: newStatus !== "none" };
+        }),
+      };
+    });
+  };
+
+  const finishDotEdit = async () => {
+    setSavingOverrides(true);
+    // Envia todos os overrides pendentes em paralelo
+    await Promise.all(
+      Object.entries(pendingOverrides).map(([date, status]) =>
+        fetch("/api/statistics", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, status }),
+        }).catch(console.error)
+      )
+    );
+    // Se teve algum "auto", recarrega para pegar status recalculado
+    const hasAuto = Object.values(pendingOverrides).some(s => s === "auto");
+    if (hasAuto) {
+      const newStats = await fetch("/api/statistics").then(r => r.json()).catch(() => null);
+      if (newStats) setStats(newStats);
+    }
+    setPendingOverrides({});
+    setSavingOverrides(false);
+    setDotEditMode(false);
   };
 
   useEffect(() => {
@@ -263,10 +296,11 @@ export default function DashboardPage() {
                   {stats.consistency}% constância
                 </span>
                 <button
-                  onClick={() => setDotEditMode(v => !v)}
-                  className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-colors ${dotEditMode ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
+                  onClick={() => dotEditMode ? finishDotEdit() : setDotEditMode(true)}
+                  disabled={savingOverrides}
+                  className={`flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${dotEditMode ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500 hover:bg-gray-200"}`}>
                   <Pencil className="w-3 h-3" />
-                  {dotEditMode ? "Concluir edição" : "Editar"}
+                  {savingOverrides ? "Salvando..." : dotEditMode ? `Concluir edição${Object.keys(pendingOverrides).length > 0 ? ` (${Object.keys(pendingOverrides).length})` : ""}` : "Editar"}
                 </button>
               </div>
             )}
@@ -281,8 +315,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap gap-1.5">
             {stats?.consistencyDots.map((dot, i) => {
               const isFuture = dot.date > new Date().toISOString().slice(0,10);
-              const isSaving = savingDot === dot.date;
-              if (dotEditMode && !isFuture) {
+                      if (dotEditMode && !isFuture) {
                 return (
                   <div key={i} className="relative group">
                     <div
@@ -291,7 +324,7 @@ export default function DashboardPage() {
                         dot.status === "done"    ? "bg-green-500"
                         : dot.status === "partial" ? "bg-yellow-400"
                         : "bg-red-400"
-                      } ${isSaving ? "opacity-50" : ""}`}>
+                      }`}>
                       {dot.status === "done"    && <CheckCircle className="w-3.5 h-3.5 text-white" />}
                       {dot.status === "partial" && <span className="text-white font-bold text-[10px]">~</span>}
                       {dot.status === "none"    && <span className="text-white font-bold text-[10px]">✕</span>}
