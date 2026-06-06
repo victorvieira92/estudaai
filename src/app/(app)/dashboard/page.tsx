@@ -464,24 +464,24 @@ export default function DashboardPage() {
               {chartData.length > 0 ? (
                 chartMode === "hours" ? (
                   // Modo Tempo — barra simples
-                  <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                  <ResponsiveContainer width="100%" height={170}>
+                    <BarChart data={chartData} margin={{ top: 22, right: 0, left: -30, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                       <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} domain={[0, (max: number) => Math.ceil(max * 1.2)]} />
                       <Tooltip formatter={(v: number) => [`${v.toFixed(1)}h`, "Horas"]} />
-                      <Bar dataKey="hours" radius={[3,3,0,0]} fill={BG}
+                      <Bar dataKey="hours" radius={[3,3,0,0]} fill={BG} maxBarSize={40}
                         label={{ position: "top", fontSize: 9, fill: "#6B7280",
                           formatter: (v: number) => v > 0 ? `${v.toFixed(1)}h` : "" }} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
                   // Modo Questões — barras empilhadas: acertos (verde) + erros (vermelho)
-                  <ResponsiveContainer width="100%" height={140}>
-                    <BarChart data={chartData} margin={{ top: 0, right: 0, left: -30, bottom: 0 }}>
+                  <ResponsiveContainer width="100%" height={170}>
+                    <BarChart data={chartData} margin={{ top: 22, right: 0, left: -30, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                       <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                      <YAxis tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} domain={[0, (max: number) => Math.ceil(max * 1.2)]} />
                       <Tooltip
                         formatter={(v: number, name: string) => [
                           v,
