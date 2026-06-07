@@ -54,6 +54,37 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
     if (ref.current) onChange(ref.current.innerHTML);
   };
 
+  const insertList = (type: "ul" | "ol") => {
+    if (!ref.current) return;
+    ref.current.focus();
+
+    // Tenta execCommand primeiro
+    const cmd = type === "ul" ? "insertUnorderedList" : "insertOrderedList";
+    const worked = document.execCommand(cmd, false);
+
+    if (!worked) {
+      // Fallback: insere HTML diretamente na posição do cursor
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const list = document.createElement(type);
+        const li = document.createElement("li");
+        li.innerHTML = "<br>";
+        list.appendChild(li);
+        range.insertNode(list);
+        // Move cursor para dentro do li
+        const newRange = document.createRange();
+        newRange.setStart(li, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+      }
+    }
+
+    if (ref.current) onChange(ref.current.innerHTML);
+  };
+
   const handlePaintClick = () => {
     if (!painting) {
       // Captura formatação da seleção atual
@@ -118,31 +149,11 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("subscript")}} title="Subscrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sub>2</sub></button>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
         {/* Listas */}
-        <button type="button" onMouseDown={e=>{
-            e.preventDefault();
-            const sel = window.getSelection();
-            if (!sel || !ref.current) return;
-            ref.current.focus();
-            const success = document.execCommand("insertUnorderedList", false);
-            if (!success) {
-              document.execCommand("insertHTML", false, "<ul><li></li></ul>");
-            }
-            onChange(ref.current.innerHTML);
-          }} title="Lista com marcadores"
+        <button type="button" onMouseDown={e=>{e.preventDefault();insertList("ul");}} title="Lista com marcadores"
           className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM7 4a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
         </button>
-        <button type="button" onMouseDown={e=>{
-            e.preventDefault();
-            const sel = window.getSelection();
-            if (!sel || !ref.current) return;
-            ref.current.focus();
-            const success = document.execCommand("insertOrderedList", false);
-            if (!success) {
-              document.execCommand("insertHTML", false, "<ol><li></li></ol>");
-            }
-            onChange(ref.current.innerHTML);
-          }} title="Lista numerada"
+        <button type="button" onMouseDown={e=>{e.preventDefault();insertList("ol");}} title="Lista numerada"
           className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 3a1 1 0 0 1 1 1v3H4V4H3V3h1Zm0 8a1 1 0 0 1 1 1v.586l.293-.293a1 1 0 1 1 1.414 1.414l-2 2a1 1 0 0 1-1.414 0l-2-2a1 1 0 1 1 1.414-1.414L3 13.586V12a1 1 0 0 1 1-1ZM7 5a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 5a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
         </button>
