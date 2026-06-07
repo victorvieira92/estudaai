@@ -118,11 +118,31 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("subscript")}} title="Subscrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sub>2</sub></button>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
         {/* Listas */}
-        <button type="button" onMouseDown={e=>{e.preventDefault();exec("insertUnorderedList")}} title="Lista com marcadores"
+        <button type="button" onMouseDown={e=>{
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || !ref.current) return;
+            ref.current.focus();
+            const success = document.execCommand("insertUnorderedList", false);
+            if (!success) {
+              document.execCommand("insertHTML", false, "<ul><li></li></ul>");
+            }
+            onChange(ref.current.innerHTML);
+          }} title="Lista com marcadores"
           className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM7 4a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
         </button>
-        <button type="button" onMouseDown={e=>{e.preventDefault();exec("insertOrderedList")}} title="Lista numerada"
+        <button type="button" onMouseDown={e=>{
+            e.preventDefault();
+            const sel = window.getSelection();
+            if (!sel || !ref.current) return;
+            ref.current.focus();
+            const success = document.execCommand("insertOrderedList", false);
+            if (!success) {
+              document.execCommand("insertHTML", false, "<ol><li></li></ol>");
+            }
+            onChange(ref.current.innerHTML);
+          }} title="Lista numerada"
           className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 3a1 1 0 0 1 1 1v3H4V4H3V3h1Zm0 8a1 1 0 0 1 1 1v.586l.293-.293a1 1 0 1 1 1.414 1.414l-2 2a1 1 0 0 1-1.414 0l-2-2a1 1 0 1 1 1.414-1.414L3 13.586V12a1 1 0 0 1 1-1ZM7 5a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 5a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
         </button>
@@ -139,7 +159,12 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         className={`px-4 py-3 text-sm text-gray-900 focus:outline-none ${painting ? "cursor-crosshair" : ""}`}
         style={{minHeight:`${minRows*28}px`}}
       />
-      <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;}`}</style>
+      <style>{`
+        [contenteditable]:empty:before{content:attr(data-placeholder);color:#9ca3af;pointer-events:none;}
+        [contenteditable] ul{list-style-type:disc;padding-left:1.5rem;margin:0.25rem 0;}
+        [contenteditable] ol{list-style-type:decimal;padding-left:1.5rem;margin:0.25rem 0;}
+        [contenteditable] li{margin:0.1rem 0;}
+      `}</style>
     </div>
   );
 }
