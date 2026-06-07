@@ -113,7 +113,21 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
           {[["1","10px"],["2","12px"],["3","14px"],["4","16px"],["5","18px"],["6","22px"],["7","26px"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
         </select>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        <button type="button" onMouseDown={e=>{e.preventDefault();exec("removeFormat")}} className="px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200 rounded">✕</button>
+        {/* Sobrescrito / Subscrito */}
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("superscript")}} title="Sobrescrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sup>2</sup></button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("subscript")}} title="Subscrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sub>2</sub></button>
+        <div className="w-px h-5 bg-gray-300 mx-1"/>
+        {/* Listas */}
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("insertUnorderedList")}} title="Lista com marcadores"
+          className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM7 4a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
+        </button>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("insertOrderedList")}} title="Lista numerada"
+          className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
+          <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 3a1 1 0 0 1 1 1v3H4V4H3V3h1Zm0 8a1 1 0 0 1 1 1v.586l.293-.293a1 1 0 1 1 1.414 1.414l-2 2a1 1 0 0 1-1.414 0l-2-2a1 1 0 1 1 1.414-1.414L3 13.586V12a1 1 0 0 1 1-1ZM7 5a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 5a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
+        </button>
+        <div className="w-px h-5 bg-gray-300 mx-1"/>
+        <button type="button" onMouseDown={e=>{e.preventDefault();exec("removeFormat")}} title="Limpar formatação" className="px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-200 rounded">✕</button>
       </div>
       <div
         ref={ref}

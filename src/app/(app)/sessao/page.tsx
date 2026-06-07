@@ -67,7 +67,6 @@ function SessaoContent() {
   const [videos, setVideos] = useState<VideoAula[]>([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
 
   const [comment,      setComment]      = useState("");
-  const [saveAndNew,   setSaveAndNew]   = useState(false);
   const [saving,          setSaving]          = useState(false);
   const [saved,           setSaved]           = useState(false);
   const [error,           setError]           = useState("");
@@ -548,13 +547,7 @@ function SessaoContent() {
 
             {/* ── Footer: Salvar e criar novo | Cancelar | Salvar ── */}
             <div className="flex items-center justify-between pt-2">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${saveAndNew ? "border-teal-500 bg-teal-500" : "border-gray-300"}`}
-                  onClick={() => setSaveAndNew(!saveAndNew)}>
-                  {saveAndNew && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                </span>
-                <span className="text-xs font-bold uppercase tracking-widest text-gray-600">Salvar e Criar Novo</span>
-              </label>
+<div />
 
               <div className="flex gap-3">
                 <button onClick={resetForm}
