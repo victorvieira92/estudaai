@@ -26,6 +26,7 @@ model User {
   weeklyConfig  WeeklyCycleConfig?
   studyBlocks   StudyBlock[]
   editalTopicos EditalTopico[]
+  editalImports UserEditalImport[]
   cycleState    UserCycleState?
 }
 
@@ -248,6 +249,7 @@ model EditalTopico {
   id           String    @id @default(cuid())
   userId       String
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source       String    @default("afrfb") // "afrfb" = edital hardcoded | "custom" = importado do TEC
   modulo       String
   disciplina   String
   topico       String
@@ -260,7 +262,21 @@ model EditalTopico {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  @@unique([userId, disciplina, topico])
+  @@unique([userId, source, disciplina, topico])
+  @@index([userId])
+  @@index([userId, source])
+}
+
+model UserEditalImport {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  sourceUrl   String
+  importedAt  DateTime @default(now())
+  totalTopics Int      @default(0)
+
+  @@unique([userId, sourceUrl])
   @@index([userId])
 }
 

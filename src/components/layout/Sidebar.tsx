@@ -15,6 +15,7 @@ const nav = [
   { href: "/historico",        label: "Histórico",         icon: History },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
+  { href: "/meu-edital",        label: "Meu Edital",        icon: ScrollText },
   { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays },
   { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp },
   { href: "/materias",         label: "Materias",          icon: Target },
