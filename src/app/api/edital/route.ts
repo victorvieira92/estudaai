@@ -149,8 +149,8 @@ export async function PATCH(req: Request) {
   if (!disciplina || !topico) return NextResponse.json({ message: "Dados inválidos." }, { status: 400 });
 
   await prisma.editalTopico.upsert({
-    where:  { userId_disciplina_topico: { userId: uid, disciplina, topico } },
-    create: { userId: uid, modulo, disciplina, topico, ordem: ordem ?? 0, concluido: concluido ?? false, questoes: questoes ?? 0, acertos: acertos ?? 0, erros: erros ?? 0, ultimoEstudo: concluido ? new Date() : null },
+    where:  { userId_source_disciplina_topico: { userId: uid, source: "afrfb", disciplina, topico } },
+    create: { userId: uid, source: "afrfb", modulo, disciplina, topico, ordem: ordem ?? 0, concluido: concluido ?? false, questoes: questoes ?? 0, acertos: acertos ?? 0, erros: erros ?? 0, ultimoEstudo: concluido ? new Date() : null },
     update: { concluido: concluido ?? false, questoes: questoes ?? 0, acertos: acertos ?? 0, erros: erros ?? 0, updatedAt: new Date(), ...(concluido ? { ultimoEstudo: new Date() } : {}) },
   });
 
