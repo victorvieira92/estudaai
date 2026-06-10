@@ -5,9 +5,46 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// Extrai texto limpo removendo HTML
+// Extrai texto limpo removendo HTML e decodificando entidades HTML
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+  return html
+    .replace(/<[^>]*>/g, "")
+    // Entidades nomeadas comuns
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Caracteres especiais do português
+    .replace(/&aacute;/g, "á").replace(/&Aacute;/g, "Á")
+    .replace(/&agrave;/g, "à").replace(/&Agrave;/g, "À")
+    .replace(/&acirc;/g, "â").replace(/&Acirc;/g, "Â")
+    .replace(/&atilde;/g, "ã").replace(/&Atilde;/g, "Ã")
+    .replace(/&auml;/g, "ä").replace(/&Auml;/g, "Ä")
+    .replace(/&eacute;/g, "é").replace(/&Eacute;/g, "É")
+    .replace(/&egrave;/g, "è").replace(/&Egrave;/g, "È")
+    .replace(/&ecirc;/g, "ê").replace(/&Ecirc;/g, "Ê")
+    .replace(/&euml;/g, "ë").replace(/&Euml;/g, "Ë")
+    .replace(/&iacute;/g, "í").replace(/&Iacute;/g, "Í")
+    .replace(/&igrave;/g, "ì").replace(/&Igrave;/g, "Ì")
+    .replace(/&icirc;/g, "î").replace(/&Icirc;/g, "Î")
+    .replace(/&iuml;/g, "ï").replace(/&Iuml;/g, "Ï")
+    .replace(/&oacute;/g, "ó").replace(/&Oacute;/g, "Ó")
+    .replace(/&ograve;/g, "ò").replace(/&Ograve;/g, "Ò")
+    .replace(/&ocirc;/g, "ô").replace(/&Ocirc;/g, "Ô")
+    .replace(/&otilde;/g, "õ").replace(/&Otilde;/g, "Õ")
+    .replace(/&ouml;/g, "ö").replace(/&Ouml;/g, "Ö")
+    .replace(/&uacute;/g, "ú").replace(/&Uacute;/g, "Ú")
+    .replace(/&ugrave;/g, "ù").replace(/&Ugrave;/g, "Ù")
+    .replace(/&ucirc;/g, "û").replace(/&Ucirc;/g, "Û")
+    .replace(/&uuml;/g, "ü").replace(/&Uuml;/g, "Ü")
+    .replace(/&ccedil;/g, "ç").replace(/&Ccedil;/g, "Ç")
+    .replace(/&ntilde;/g, "ñ").replace(/&Ntilde;/g, "Ñ")
+    // Entidades numéricas decimais e hexadecimais
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+    .trim();
 }
 
 // Transforma URL do guia para URL do edital verticalizado
