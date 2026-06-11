@@ -62,25 +62,77 @@ interface ParsedEdital {
 // Parser do HTML do edital verticalizado do TEC
 function parseEditalHtml(html: string, pageTitle: string): ParsedEdital {
   const modulos: ParsedEdital["modulos"] = [];
-  let currentModulo = "";
+  let currentModulo = "MÓDULO ÚNICO";
   let currentDisciplina = "";
   let currentTopicos: string[] = [];
 
-  // Remove scripts e estilos
+  // Remove scripts, estilos e comentários
   const clean = html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "");
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
 
-  // Extrai o conteúdo entre "Conteúdo Programático" e "Um dos primeiros passos"
+  // Extrai entre "Conteúdo Programático" e "Um dos primeiros passos"
   const startIdx = clean.indexOf("Conteúdo Programático");
   const endIdx   = clean.indexOf("Um dos primeiros passos");
   const body     = startIdx > -1 ? clean.slice(startIdx, endIdx > -1 ? endIdx : undefined) : clean;
 
-  // Processa linha a linha
-  const lines = body
-    .split(/\n|<br\s*\/?>/gi)
-    .map(l => stripHtml(l).trim())
-    .filter(l => l.length > 0);
+  // Separa blocos por tags de parágrafo e divisores
+  const rawBlocks = body
+    .split(/<\/?(p|div|h[1-6]|br|li|tr)[^>]*>/gi)
+    .map(b => stripHtml(b).trim())
+    .filter(b => b.length > 1);
+
+  // Função que divide um bloco em tópicos individuais
+  // Padrão TEC: "1 Tópico A . 2 Tópico B . 3 Tópico C"
+  // ou: "1. Tópico A 2. Tópico B"
+  // ou: "1.1 Sub 1.2 Sub" 
+  function splitTopicos(text: string): string[] {
+    // Padrão: número seguido de espaço e texto, separado por " . N " ou ". N "
+    // Ex: "1 NBC TA . 2 Amostragem" → ["NBC TA", "Amostragem"]
+    
+    // Remove pontuação final
+    text = text.replace(/\.\s*$/, "").trim();
+    
+    // Padrão 1: "N.N. - Texto N.N. - Texto" (subtópicos com traço)
+    if (/\d+\.\d+\.?\s*[-–]/.test(text)) {
+      const parts = text
+        .split(/(?=\d+\.\d+\.?\s*[-–])/)
+        .map(s => s.replace(/^\d+\.\d+\.?\s*[-–]\s*/, "").replace(/\.\s*\d+\.?\s*$/, "").trim())
+        .filter(s => s.length > 2);
+      if (parts.length > 1) return parts;
+    }
+
+    // Padrão 2: "1 Texto . 2 Texto" (padrão TEC com ponto espaçado)
+    const splitByDotNumber = text.split(/\s+\.\s+(?=\d+[\s.])/);
+    if (splitByDotNumber.length > 1) {
+      return splitByDotNumber
+        .map(s => s.replace(/^\d+[\s.]\s*/, "").replace(/^\d+\.\d+[\s.]\s*/, "").trim())
+        .filter(s => s.length > 2);
+    }
+
+    // Padrão 3: "1. Texto 2. Texto" (numeração com ponto colado)
+    if (/(?:^|\s)\d+\.\s+[A-ZÀ-Üa-zà-ü]/.test(text)) {
+      const parts = text
+        .split(/(?<=\s)(?=\d+\.\d+\.?\s|\d+\.\s)/)
+        .map(s => s.replace(/^\d+\.\d+\.?\s+/, "").replace(/^\d+\.\s+/, "").trim())
+        .filter(s => s.length > 2);
+      if (parts.length > 1) return parts;
+    }
+
+    // Padrão 4: "1 Texto . 2 Texto" sem ponto colado
+    if (/^\d+\s+[A-ZÀ-Üa-zà-ü]/.test(text)) {
+      const parts = text
+        .split(/(?<=\w)\s+\.\s+(?=\d+\s+[A-ZÀ-Üa-zà-ü])/)
+        .map(s => s.replace(/^\d+\s+/, "").trim())
+        .filter(s => s.length > 2);
+      if (parts.length > 1) return parts;
+      return [text.replace(/^\d+\s+/, "").trim()].filter(s => s.length > 2);
+    }
+
+    // Fallback
+    return text.length > 2 ? [text] : [];
+  }
 
   const pushDisciplina = () => {
     if (currentDisciplina && currentTopicos.length > 0) {
@@ -93,47 +145,36 @@ function parseEditalHtml(html: string, pageTitle: string): ParsedEdital {
     }
   };
 
-  for (const line of lines) {
-    // Detecta MÓDULO (ex: "MÓDULO I - CONHECIMENTOS BÁSICOS")
-    if (/^MÓDULO\s+[IVX]+/i.test(line)) {
+  for (const block of rawBlocks) {
+    if (!block || block.length < 2) continue;
+    
+    // Detecta MÓDULO
+    if (/^(MÓDULO|MODULO)\s+[IVX\d]+/i.test(block)) {
       pushDisciplina();
-      currentModulo = line.replace(/\*/g, "").trim();
+      currentModulo = block.replace(/\*/g, "").trim();
       currentDisciplina = "";
       continue;
     }
 
-    // Detecta disciplina (ex: "Língua Portuguesa:" ou "**Direito Tributário:**")
-    const discMatch = line.match(/^\*?\*?([A-ZÀ-Ü][^:]{2,60}):\*?\*?$/);
-    if (discMatch && !/^\d+\./.test(line)) {
+    // Detecta disciplina: texto que termina com ":" e não começa com número
+    // Ex: "Língua Portuguesa:" / "Direito Tributário:" / "Auditoria:"
+    if (/^[A-ZÀ-Ü][\wÀ-ü\s\-\/,()]{2,80}:$/.test(block) && !/^\d/.test(block)) {
       pushDisciplina();
-      currentDisciplina = discMatch[1].replace(/\*/g, "").trim();
+      currentDisciplina = block.replace(/:$/, "").replace(/\*/g, "").trim();
       continue;
     }
 
-    // Tópicos: linhas numeradas ou separadas por ponto e vírgula
-    if (currentDisciplina && line.length > 5 && !line.startsWith("MÓDULO")) {
-      // Divide por numeração (1. 2. 3.) ou por ponto seguido de espaço e letra maiúscula
-      const numbered = line.match(/\d+\.\s+[A-ZÀ-Ü]/);
-      if (numbered) {
-        // Extrai cada item numerado
-        const items = line.split(/(?=\d+\.\s+)/).map(s => s.replace(/^\d+\.\s+/, "").trim()).filter(s => s.length > 3);
-        currentTopicos.push(...items);
-      } else {
-        // Tópico livre — divide por ". " onde o próximo char é maiúscula
-        const parts = line.split(/\.\s+(?=[A-ZÀ-Ü])/).map(s => s.trim()).filter(s => s.length > 3);
-        if (parts.length > 1) {
-          currentTopicos.push(...parts);
-        } else if (line.length > 3) {
-          currentTopicos.push(line);
-        }
-      }
+    // Tópicos
+    if (currentDisciplina && block.length > 3) {
+      const topicos = splitTopicos(block);
+      currentTopicos.push(...topicos);
     }
   }
   pushDisciplina();
 
-  // Se não detectou módulos, cria um módulo único
-  if (modulos.length === 0 && currentDisciplina) {
-    modulos.push({ nome: "MÓDULO ÚNICO", disciplinas: [{ nome: currentDisciplina, topicos: currentTopicos }] });
+  // Garante módulo único se nenhum foi detectado
+  if (modulos.length === 0 && currentTopicos.length > 0) {
+    modulos.push({ nome: currentModulo, disciplinas: [{ nome: currentDisciplina || "Geral", topicos: currentTopicos }] });
   }
 
   return { title: pageTitle, modulos };
