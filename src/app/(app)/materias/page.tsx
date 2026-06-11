@@ -59,7 +59,8 @@ function PdfCard({
   const acc = accuracy(pdf.correctQuestions, pdf.questions);
 
   // Filtra sessões do histórico que pertencem a este PDF
-  // Match robusto: subjectId bate + pdfTitle ou topicName contém o título do PDF (ou vice-versa)
+  // Regra: match exato por pdfTitle. Só usa topicName se pdfTitle estiver vazio.
+  // Nunca usa includes — evita que "Aula 01" bata com "Aula 01 parte 2"
   const normalize = (str: string) => str.trim().toLowerCase();
   const pdfNorm   = normalize(pdf.title);
 
@@ -67,13 +68,10 @@ function PdfCard({
     if (s.subjectId !== subjectId) return false;
     const titleNorm = normalize(s.pdfTitle);
     const topicNorm = normalize(s.topicName);
-    if (!titleNorm && !topicNorm) return false;
-    // Match exato
-    if (titleNorm === pdfNorm) return true;
-    if (topicNorm === pdfNorm) return true;
-    // Match por inclusão (um contém o outro)
-    if (titleNorm && (titleNorm.includes(pdfNorm) || pdfNorm.includes(titleNorm))) return true;
-    if (topicNorm && (topicNorm.includes(pdfNorm) || pdfNorm.includes(topicNorm))) return true;
+    // Se a sessão tem pdfTitle preenchido: match exato com o título do PDF
+    if (titleNorm) return titleNorm === pdfNorm;
+    // Se não tem pdfTitle: match exato pelo topicName
+    if (topicNorm) return topicNorm === pdfNorm;
     return false;
   });
 
