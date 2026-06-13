@@ -176,6 +176,9 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         [contenteditable] ul{list-style-type:disc;padding-left:1.5rem;margin:0.25rem 0;}
         [contenteditable] ol{list-style-type:decimal;padding-left:1.5rem;margin:0.25rem 0;}
         [contenteditable] li{margin:0.1rem 0;}
+        .note-content ul{list-style-type:disc;padding-left:1.5rem;margin:0.25rem 0;}
+        .note-content ol{list-style-type:decimal;padding-left:1.5rem;margin:0.25rem 0;}
+        .note-content li{margin:0.1rem 0;}
       `}</style>
     </div>
   );
@@ -516,7 +519,7 @@ export default function CadernoPage() {
                 {n.banca&&<span className="text-xs text-gray-400">• {n.banca}</span>}
                 <span className="text-xs text-gray-400">{fmtDate(n.createdAt)}</span>
               </div>
-              <div className="font-semibold text-gray-900 leading-snug" dangerouslySetInnerHTML={{__html:n.title}}/>
+              <div className="font-semibold text-gray-900 leading-snug note-content" dangerouslySetInnerHTML={{__html:n.title}}/>
             </div>
             <div className="flex gap-1.5 shrink-0">
               <button onClick={()=>startEdit(n)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
@@ -538,7 +541,7 @@ export default function CadernoPage() {
         {(isRevealed || !n.pending) && (
           <div className={`border-t px-5 py-4 ${n.pending ? "bg-gray-50 border-gray-100" : "bg-green-50 border-green-100"}`}>
             {n.description && (
-              <div className="text-sm text-gray-700 leading-relaxed mb-3" dangerouslySetInnerHTML={{__html:n.description}}/>
+              <div className="text-sm text-gray-700 leading-relaxed mb-3 note-content" dangerouslySetInnerHTML={{__html:n.description}}/>
             )}
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs text-gray-400">
