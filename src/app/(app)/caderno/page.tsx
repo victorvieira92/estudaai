@@ -21,6 +21,7 @@ const ERROR_TYPES = [
   { value: "interpretacao",      label: "Erro de interpretação", desc: "Entendeu o enunciado de forma errada",    emoji: "📖" },
   { value: "pegadinha",          label: "Pegadinha",             desc: "Questão com detalhe que induziu ao erro", emoji: "🪤" },
   { value: "outro",              label: "Outro",                 desc: "Motivo diferente dos acima",              emoji: "❓" },
+  { value: "decoreba",           label: "Decoreba",              desc: "Regra ou conceito para memorizar",        emoji: "📌" },
 ];
 
 const COLORS = ["#000000","#dc2626","#16a34a","#2563eb","#9333ea","#ea580c","#0891b2"];
@@ -393,7 +394,7 @@ export default function CadernoPage() {
   const [tab, setTab] = useState<Tab>("cadernos");
   const [notes, setNotes] = useState<ErrorNote[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [filter, setFilter] = useState<"pending"|"all"|"resolved">("pending");
+  const [filter, setFilter] = useState<"pending"|"all"|"resolved"|"decoreba">("pending");
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   const reveal = (id: string) => setRevealedIds(prev => new Set([...prev, id]));
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
@@ -429,7 +430,12 @@ export default function CadernoPage() {
     fetch("/api/subjects").then(r=>r.json()).then(d=>setSubjects(Array.isArray(d)?d:(d.subjects??[]))).catch(console.error);
   },[]);
 
-  const filtered = useMemo(()=>notes.filter(n=>filter==="all"?true:filter==="pending"?n.pending:!n.pending),[notes,filter]);
+  const filtered = useMemo(()=>notes.filter(n=>{
+    if (filter === "decoreba") return n.errorType === "decoreba";
+    if (filter === "pending")  return n.pending && n.errorType !== "decoreba";
+    if (filter === "resolved") return !n.pending && n.errorType !== "decoreba";
+    return true;
+  }),[notes,filter]);
 
   const grouped = useMemo(()=>{
     const out: Record<string,{name:string;topics:Record<string,ErrorNote[]>;noTopic:ErrorNote[]}> = {};
@@ -496,7 +502,8 @@ export default function CadernoPage() {
 
   const NoteCard = ({n}:{n:ErrorNote})=>{
     const et = etLabel(n.errorType);
-    const isRevealed = revealedIds.has(n.id);
+    const isDecoreta = n.errorType === "decoreba";
+    const isRevealed = revealedIds.has(n.id) || isDecoreta;
     return (
       <div className={`bg-white rounded-2xl border overflow-hidden ${!n.pending?"border-green-200 opacity-70":"border-gray-200"}`}>
         {/* Pergunta — sempre visível */}
@@ -518,7 +525,7 @@ export default function CadernoPage() {
           </div>
 
           {/* Botão revelar — só aparece se ainda não revelou e tem pendente */}
-          {n.pending && !isRevealed && (
+          {n.pending && !isRevealed && !isDecoreta && (
             <button
               onClick={() => reveal(n.id)}
               className="mt-4 w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50 transition-all font-medium">
@@ -545,8 +552,10 @@ export default function CadernoPage() {
               </p>
               {n.pending && (
                 <div className="flex gap-1.5">
+                  {!isDecoreta && <>
                   <button onClick={()=>action(n.id,"wrong")} className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-medium transition-colors"><XCircle className="w-4 h-4"/> Errei</button>
                   <button onClick={()=>action(n.id,"correct")} className="flex items-center gap-1.5 px-3 py-2 bg-green-50 hover:bg-green-100 text-green-600 border border-green-200 rounded-lg text-xs font-medium transition-colors"><CheckCircle className="w-4 h-4"/> Acertei</button>
+                </>}
                 </div>
               )}
             </div>
@@ -647,7 +656,7 @@ export default function CadernoPage() {
           <div className="space-y-6">
             {/* KPIs */}
             <div className="grid grid-cols-4 gap-4">
-              {[["Total",notes.length,"text-gray-900"],["Pendentes",metrics.pending,"text-red-600"],["Resolvidos",metrics.resolved,"text-green-600"],["Críticos",metrics.critical,"text-orange-600"]].map(([l,v,c])=>(
+              {[["Total",notes.length,"text-gray-900"],["Pendentes",metrics.pending,"text-red-600"],["Resolvidos",metrics.resolved,"text-green-600"],["Críticos",metrics.critical,"text-orange-600"],["Decorebas",notes.filter(n=>n.errorType==="decoreba").length,"text-purple-600"]].map(([l,v,c])=>(
                 <div key={l as string} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
                   <p className="text-xs text-gray-500 mb-1">{l}</p>
                   <p className={`text-3xl font-bold ${c}`}>{v}</p>
@@ -663,6 +672,10 @@ export default function CadernoPage() {
                   {f==="pending"?"Pendentes":f==="all"?"Todos":"Resolvidos"}
                 </button>
               ))}
+              <button onClick={()=>setFilter("decoreba")}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${filter==="decoreba"?"bg-purple-700 text-white":"bg-purple-100 border border-purple-200 text-purple-700 hover:bg-purple-200"}`}>
+                📌 Decoreba
+              </button>
             </div>
 
             {/* Pastas agrupadas */}
