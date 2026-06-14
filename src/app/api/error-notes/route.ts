@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
 
-  const { title, description, subjectId, topic, banca, difficulty = "Media", errorType } = await req.json();
+  const { title, description, hint, subjectId, topic, banca, difficulty = "Media", errorType } = await req.json();
   if (!title?.trim() || !description?.trim() || !subjectId)
     return NextResponse.json({ message: "Dados inválidos." }, { status: 400 });
 
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
     data: {
       title: title.trim(),
       description: description.trim(),
+      hint: hint?.trim() || null,
       subjectId,
       topic,
       banca,

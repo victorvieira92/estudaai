@@ -163,6 +163,7 @@ model ErrorNote {
   banca          String?
   difficulty     String   @default("Media")
   errorType      String?
+  hint           String?
   resolved       Boolean  @default(false)
   reviewCount    Int      @default(0)
   wrongCount     Int      @default(0)

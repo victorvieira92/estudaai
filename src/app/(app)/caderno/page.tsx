@@ -1,11 +1,11 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { Plus, CheckCircle, XCircle, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Search, BarChart2, BookOpen, BookMarked } from "lucide-react";
+import { Plus, CheckCircle, XCircle, Pencil, Trash2, X, Check, ChevronDown, ChevronRight, Search, BarChart2, BookOpen, BookMarked, Lightbulb } from "lucide-react";
 
 interface SubjectTopic { id: string; name: string; pdfs: { title: string }[]; }
 interface Subject { id: string; name: string; topics?: SubjectTopic[]; }
 interface ErrorNote {
-  id: string; title: string; description: string; topic: string | null;
+  id: string; title: string; description: string; hint: string | null; topic: string | null;
   banca: string | null; difficulty: string; errorType: string | null;
   resolved: boolean; reviewCount: number; wrongCount: number;
   pending: boolean; nextReviewAt: string | null; intervalDays: number;
@@ -58,13 +58,9 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
   const insertList = (type: "ul" | "ol") => {
     if (!ref.current) return;
     ref.current.focus();
-
-    // Tenta execCommand primeiro
     const cmd = type === "ul" ? "insertUnorderedList" : "insertOrderedList";
     const worked = document.execCommand(cmd, false);
-
     if (!worked) {
-      // Fallback: insere HTML diretamente na posição do cursor
       const sel = window.getSelection();
       if (sel && sel.rangeCount > 0) {
         const range = sel.getRangeAt(0);
@@ -74,7 +70,6 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         li.innerHTML = "<br>";
         list.appendChild(li);
         range.insertNode(list);
-        // Move cursor para dentro do li
         const newRange = document.createRange();
         newRange.setStart(li, 0);
         newRange.collapse(true);
@@ -82,13 +77,11 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         sel.addRange(newRange);
       }
     }
-
     if (ref.current) onChange(ref.current.innerHTML);
   };
 
   const handlePaintClick = () => {
     if (!painting) {
-      // Captura formatação da seleção atual
       const color = document.queryCommandValue("foreColor");
       const bold = document.queryCommandState("bold");
       const italic = document.queryCommandState("italic");
@@ -125,7 +118,6 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("bold")}} className="w-7 h-7 flex items-center justify-center font-bold text-sm hover:bg-gray-200 rounded">B</button>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("italic")}} className="w-7 h-7 flex items-center justify-center italic text-sm hover:bg-gray-200 rounded">I</button>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("underline")}} className="w-7 h-7 flex items-center justify-center underline text-sm hover:bg-gray-200 rounded">U</button>
-        {/* Pincel de formatação */}
         <button
           type="button"
           onMouseDown={e => { e.preventDefault(); handlePaintClick(); }}
@@ -145,11 +137,9 @@ function RichEditor({ value, onChange, placeholder, minRows = 3 }: { value: stri
           {[["1","10px"],["2","12px"],["3","14px"],["4","16px"],["5","18px"],["6","22px"],["7","26px"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
         </select>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        {/* Sobrescrito / Subscrito */}
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("superscript")}} title="Sobrescrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sup>2</sup></button>
         <button type="button" onMouseDown={e=>{e.preventDefault();exec("subscript")}} title="Subscrito" className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-200 rounded font-bold">X<sub>2</sub></button>
         <div className="w-px h-5 bg-gray-300 mx-1"/>
-        {/* Listas */}
         <button type="button" onMouseDown={e=>{e.preventDefault();insertList("ul");}} title="Lista com marcadores"
           className="w-7 h-7 flex items-center justify-center hover:bg-gray-200 rounded text-gray-600">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4"><path fillRule="evenodd" d="M4 5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm0 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM7 4a1 1 0 0 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Zm0 6a1 1 0 1 0 0 2h9a1 1 0 1 0 0-2H7Z" clipRule="evenodd"/></svg>
@@ -190,7 +180,6 @@ type Tab = "cadernos" | "registrar" | "evolucao" | "pesquisa";
 function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
   const [expandedSub, setExpandedSub] = useState<string | null>(null);
 
-  // Gráfico de barras simples sem dependências externas
   const SubjectChart = ({ subNotes }: { subNotes: ErrorNote[] }) => {
     const data = ERROR_TYPES.map(et => ({
       label: et.label, emoji: et.emoji,
@@ -226,7 +215,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
 
   return (
     <div className="space-y-6">
-      {/* KPIs globais */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         {[
           { label: "Total de erros",    value: notes.length,           color: "text-gray-900" },
@@ -242,7 +230,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
         ))}
       </div>
 
-      {/* Gráfico global de tipos de erro */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6">
         <h2 className="font-bold text-gray-900 mb-1">Distribuição global por tipo de erro</h2>
         <p className="text-xs text-gray-400 mb-4">Seu maior padrão de erro em todas as disciplinas</p>
@@ -269,7 +256,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
         {notes.length === 0 && <p className="text-center text-gray-400 text-sm mt-4">Nenhum erro registrado ainda.</p>}
       </div>
 
-      {/* Pastinhas por disciplina */}
       <div>
         <h2 className="font-bold text-gray-900 mb-3">Análise por disciplina</h2>
         <div className="space-y-3">
@@ -288,7 +274,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
 
             return (
               <div key={s.name} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                {/* Header da pastinha */}
                 <button onClick={() => setExpandedSub(isOpen ? null : s.name)}
                   className="w-full px-6 py-5 flex items-center gap-4 hover:bg-gray-50 transition-colors text-left">
                   {isOpen ? <ChevronDown className="w-5 h-5 text-gray-400 shrink-0"/> : <ChevronRight className="w-5 h-5 text-gray-400 shrink-0"/>}
@@ -300,7 +285,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
                       {topError.count > 0 && <span className="text-xs text-gray-500">Principal erro: {topError.emoji} {topError.label}</span>}
                     </div>
                   </div>
-                  {/* Mini métricas */}
                   <div className="hidden md:flex items-center gap-6 shrink-0">
                     <div className="text-center">
                       <p className="text-xs text-gray-400">Pendentes</p>
@@ -321,15 +305,12 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
                   </div>
                 </button>
 
-                {/* Conteúdo expandido */}
                 {isOpen && (
                   <div className="border-t border-gray-100 px-6 pb-6">
                     <div className="grid md:grid-cols-2 gap-6 mt-4">
-                      {/* Gráfico de tipos */}
                       <div>
                         <SubjectChart subNotes={subNotes}/>
                       </div>
-                      {/* Métricas detalhadas */}
                       <div className="space-y-3">
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Detalhes</p>
                         <div className="grid grid-cols-2 gap-3">
@@ -345,7 +326,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
                             </div>
                           ))}
                         </div>
-                        {/* Dificuldades */}
                         <div className="space-y-2">
                           {[["Alta","bg-red-500"],["Media","bg-yellow-400"],["Baixa","bg-green-500"]].map(([d, color]) => {
                             const c = subNotes.filter(n => n.difficulty === d).length;
@@ -360,7 +340,6 @@ function EvolucaoTab({ notes, metrics }: { notes: ErrorNote[]; metrics: any }) {
                             );
                           })}
                         </div>
-                        {/* Tópicos com mais erros */}
                         {(() => {
                           const byTopic: Record<string, number> = {};
                           subNotes.forEach(n => { const t = n.topic || "Sem tópico"; byTopic[t] = (byTopic[t] || 0) + 1; });
@@ -398,16 +377,21 @@ export default function CadernoPage() {
   const [notes, setNotes] = useState<ErrorNote[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [filter, setFilter] = useState<"pending"|"all"|"resolved"|"decoreba">("pending");
-  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
-  const reveal = (id: string) => setRevealedIds(prev => new Set([...prev, id]));
-  const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
-  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set());
+  const [revealedIds, setRevealedIds] = useState<Record<string, boolean>>({});
+  const reveal = (id: string) => setRevealedIds(prev => ({ ...prev, [id]: true }));
+  // Track which cards have the hint balloon open
+  const [hintOpenIds, setHintOpenIds] = useState<Record<string, boolean>>({});
+  const toggleHint = (id: string) => setHintOpenIds(prev => ({ ...prev, [id]: !prev[id] }));
+
+  const [expandedSubs, setExpandedSubs] = useState<Record<string, boolean>>({});
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const [searchQuery, setSearchQuery] = useState("");
 
   // Form
   const [subjectId, setSubjectId] = useState("");
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
+  const [hint, setHint] = useState("");
   const [topic, setTopic] = useState("");
   const [topicFocused, setTopicFocused] = useState(false);
   const [banca, setBanca] = useState("");
@@ -420,6 +404,7 @@ export default function CadernoPage() {
   const [editingNote, setEditingNote] = useState<ErrorNote|null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
+  const [editHint, setEditHint] = useState("");
   const [editTopic, setEditTopic] = useState("");
   const [editBanca, setEditBanca] = useState("");
   const [editDifficulty, setEditDifficulty] = useState("Media");
@@ -456,7 +441,6 @@ export default function CadernoPage() {
     return notes.filter(n=>stripHtml(n.title).toLowerCase().includes(q)||stripHtml(n.description).toLowerCase().includes(q)||(n.topic??"").toLowerCase().includes(q)||(n.banca??"").toLowerCase().includes(q)||n.subject.name.toLowerCase().includes(q));
   },[notes,searchQuery]);
 
-  // Métricas
   const metrics = useMemo(()=>{
     const total = notes.length;
     const resolved = notes.filter(n=>!n.pending).length;
@@ -476,8 +460,8 @@ export default function CadernoPage() {
   const add = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true);
     if (!stripHtml(title).trim()) { setSaving(false); return; }
-    const res = await fetch("/api/error-notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,description:desc,subjectId,topic,banca,difficulty,errorType:errorType||null})});
-    if (res.ok) { setTitle(""); setDesc(""); setTopic(""); setBanca(""); setErrorType(""); setSaved(true); setTimeout(()=>setSaved(false),2500); load(); }
+    const res = await fetch("/api/error-notes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,description:desc,hint:hint||null,subjectId,topic,banca,difficulty,errorType:errorType||null})});
+    if (res.ok) { setTitle(""); setDesc(""); setHint(""); setTopic(""); setBanca(""); setErrorType(""); setSaved(true); setTimeout(()=>setSaved(false),2500); load(); }
     setSaving(false);
   };
 
@@ -493,20 +477,25 @@ export default function CadernoPage() {
 
   const startEdit = (n:ErrorNote)=>{
     setEditingNote(n); setEditTitle(n.title); setEditDesc(n.description);
+    setEditHint(n.hint??"");
     setEditTopic(n.topic??""); setEditBanca(n.banca??"");
     setEditDifficulty(n.difficulty); setEditErrorType(n.errorType??""); setEditSubjectId(n.subjectId);
   };
 
   const saveEdit = async()=>{
     if(!editingNote)return; setSavingEdit(true);
-    await fetch(`/api/error-notes/${editingNote.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:editTitle,description:editDesc,topic:editTopic,banca:editBanca,difficulty:editDifficulty,errorType:editErrorType||null,subjectId:editSubjectId})});
+    await fetch(`/api/error-notes/${editingNote.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:editTitle,description:editDesc,hint:editHint||null,topic:editTopic,banca:editBanca,difficulty:editDifficulty,errorType:editErrorType||null,subjectId:editSubjectId})});
     setEditingNote(null); setSavingEdit(false); load();
   };
 
+  // ── NoteCard ────────────────────────────────────────────────────────────────
   const NoteCard = ({n}:{n:ErrorNote})=>{
     const et = etLabel(n.errorType);
     const isDecoreta = n.errorType === "decoreba";
-    const isRevealed = revealedIds.has(n.id) || isDecoreta;
+    const isRevealed = !!revealedIds[n.id] || isDecoreta;
+    const hintOpen = !!hintOpenIds[n.id];
+    const hasHint = !!n.hint && stripHtml(n.hint).trim().length > 0;
+
     return (
       <div className={`bg-white rounded-2xl border overflow-hidden ${!n.pending?"border-green-200 opacity-70":"border-gray-200"}`}>
         {/* Pergunta — sempre visível */}
@@ -522,12 +511,34 @@ export default function CadernoPage() {
               <div className="font-semibold text-gray-900 leading-snug note-content" dangerouslySetInnerHTML={{__html:n.title}}/>
             </div>
             <div className="flex gap-1.5 shrink-0">
+              {/* Botão lâmpada — só aparece se tiver dica */}
+              {hasHint && (
+                <button
+                  onClick={() => toggleHint(n.id)}
+                  title="Ver dica"
+                  className={`p-2 rounded-lg transition-colors ${hintOpen ? "bg-amber-100 text-amber-600" : "text-gray-400 hover:text-amber-500 hover:bg-amber-50"}`}>
+                  <Lightbulb className="w-4 h-4"/>
+                </button>
+              )}
               <button onClick={()=>startEdit(n)} className="p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-4 h-4"/></button>
               <button onClick={()=>deleteNote(n.id)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4"/></button>
             </div>
           </div>
 
-          {/* Botão revelar — só aparece se ainda não revelou e tem pendente */}
+          {/* Balão da dica */}
+          {hasHint && hintOpen && (
+            <div className="mt-3 relative">
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Lightbulb className="w-3.5 h-3.5 text-amber-500 shrink-0"/>
+                  <span className="text-xs font-semibold text-amber-700 uppercase tracking-wide">Dica</span>
+                </div>
+                <div className="text-sm text-amber-900 leading-relaxed note-content" dangerouslySetInnerHTML={{__html: n.hint!}}/>
+              </div>
+            </div>
+          )}
+
+          {/* Botão revelar */}
           {n.pending && !isRevealed && !isDecoreta && (
             <button
               onClick={() => reveal(n.id)}
@@ -642,6 +653,13 @@ export default function CadernoPage() {
               <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Explicação</label>
               <RichEditor key={`edit-desc-${editingNote?.id}`} value={editDesc} onChange={setEditDesc} minRows={4}/>
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-500"/>
+                Dica <span className="text-gray-400 font-normal normal-case">(opcional — ajuda a lembrar sem revelar a resposta)</span>
+              </label>
+              <RichEditor key={`edit-hint-${editingNote?.id}`} value={editHint} onChange={setEditHint} placeholder="Ex: Lembre-se da regra dos 3 elementos..." minRows={2}/>
+            </div>
             <div className="flex gap-2 pt-1">
               <button onClick={saveEdit} disabled={savingEdit} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
                 <Check className="w-4 h-4"/>{savingEdit?"Salvando...":"Salvar"}
@@ -691,11 +709,11 @@ export default function CadernoPage() {
                 </div>
               )}
               {Object.entries(grouped).map(([subName,subData])=>{
-                const isExp = expandedSubs.has(subName);
+                const isExp = !!expandedSubs[subName];
                 const total = subData.noTopic.length + Object.values(subData.topics).reduce((a,arr)=>a+arr.length,0);
                 return (
                   <div key={subName} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                    <button onClick={()=>setExpandedSubs(p=>{const n=new Set(p);n.has(subName)?n.delete(subName):n.add(subName);return n;})}
+                    <button onClick={()=>setExpandedSubs(p=>({...p,[subName]:!p[subName]}))}
                       className="w-full flex items-center gap-3 px-6 py-4 hover:bg-gray-50 transition-colors text-left">
                       {isExp?<ChevronDown className="w-5 h-5 text-gray-400 shrink-0"/>:<ChevronRight className="w-5 h-5 text-gray-400 shrink-0"/>}
                       <div className="flex-1">
@@ -713,10 +731,10 @@ export default function CadernoPage() {
                         )}
                         {Object.entries(subData.topics).map(([tName,tNotes])=>{
                           const tk=`${subName}::${tName}`;
-                          const tExp=expandedTopics.has(tk);
+                          const tExp=!!expandedTopics[tk];
                           return (
                             <div key={tName} className="border-t border-gray-100">
-                              <button onClick={()=>setExpandedTopics(p=>{const n=new Set(p);n.has(tk)?n.delete(tk):n.add(tk);return n;})}
+                              <button onClick={()=>setExpandedTopics(p=>({...p,[tk]:!p[tk]}))}
                                 className="w-full flex items-center gap-3 px-8 py-3.5 hover:bg-gray-50 transition-colors text-left">
                                 {tExp?<ChevronDown className="w-4 h-4 text-gray-400 shrink-0"/>:<ChevronRight className="w-4 h-4 text-gray-400 shrink-0"/>}
                                 <div className="flex-1">
@@ -766,18 +784,13 @@ export default function CadernoPage() {
                       {topicFocused && subjectId && (() => {
                         const currentSubject = subjects.find(s => s.id === subjectId);
                         const q = topic.toLowerCase();
-
-                        // 1. Tópicos cadastrados em Matérias (fonte principal — só nomes de tópicos, sem PDFs)
                         const fromMaterias: string[] = [];
                         (currentSubject?.topics ?? []).forEach(t => {
                           if (!q || t.name.toLowerCase().includes(q)) fromMaterias.push(t.name);
                         });
-
-                        // 2. Tópicos de erros já registrados (complemento)
                         const fromNotes = notes
                           .filter(n => n.subject.name === (subjects.find(s => s.id === subjectId)?.name ?? "") && n.topic && n.topic.toLowerCase().includes(q))
                           .map(n => n.topic!);
-
                         const suggestions = [...new Set([...fromMaterias, ...fromNotes])].slice(0, 30);
                         if (!suggestions.length) return null;
                         return (
@@ -821,6 +834,13 @@ export default function CadernoPage() {
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide">Por que errei / Explicação *</label>
                   <RichEditor value={desc} onChange={setDesc} placeholder="Explique o conceito correto, o que confundiu, como lembrar..." minRows={5}/>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-500"/>
+                    Dica <span className="text-gray-400 font-normal normal-case">(opcional — ajuda a lembrar sem revelar a resposta)</span>
+                  </label>
+                  <RichEditor value={hint} onChange={setHint} placeholder="Ex: Pense na regra dos passivos contingentes — qual é a condição para evidenciar?" minRows={2}/>
                 </div>
                 <div className="flex items-center gap-4">
                   <button type="submit" disabled={saving} className="flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-semibold rounded-xl text-sm disabled:opacity-50 transition-colors">
