@@ -69,7 +69,8 @@ export async function GET() {
       entry.wrong     += s.wrong;
     }
   }
-  const subjectStats = Array.from(subjectSessionMap.values()).map(s => ({
+  const subjectStats = Array.from(subjectSessionMap.entries()).map(([id, s]) => ({
+    id,
     name:      s.name,
     hours:     parseFloat(s.hours.toFixed(1)),
     questions: s.questions,
@@ -121,19 +122,13 @@ export async function GET() {
     checkTS -= msPerDay;
   }
 
-  const todayMs = new Date(todayDS + "T12:00:00").getTime();
-
-  // ── Mês atual em BRT ──────────────────────────────────────────────────────
-  const [todayYear, todayMonth] = todayDS.split("-").map(Number);
-  const firstOfMonthDS = `${todayYear}-${String(todayMonth).padStart(2, "0")}-01`;
-  const lastDayOfMonth = new Date(todayYear, todayMonth, 0).getDate();
-  const lastOfMonthDS  = `${todayYear}-${String(todayMonth).padStart(2, "0")}-${String(lastDayOfMonth).padStart(2, "0")}`;
-  const firstOfMonthMs = new Date(firstOfMonthDS + "T12:00:00").getTime();
-  const lastOfMonthMs  = new Date(lastOfMonthDS  + "T12:00:00").getTime();
-  const totalDays      = lastDayOfMonth;
-  const studiedDays    = [...sessionDatesBR].filter(ds => ds >= firstOfMonthDS && ds <= todayDS).length;
-  const daysElapsed    = Math.round((todayMs - firstOfMonthMs) / msPerDay) + 1;
-  const consistency    = Math.round((studiedDays / daysElapsed) * 100);
+  const firstSession = allSessions[0];
+  const firstDS      = firstSession ? toBRDate(new Date(firstSession.createdAt)) : todayDS;
+  const firstMs      = new Date(firstDS + "T12:00:00").getTime();
+  const todayMs      = new Date(todayDS + "T12:00:00").getTime();
+  const totalDays    = Math.max(1, Math.round((todayMs - firstMs) / msPerDay) + 1);
+  const studiedDays  = sessionDatesBR.size;
+  const consistency  = Math.round((studiedDays / totalDays) * 100);
 
   // Mapa data → sessões (subjectId) para calcular parcial/completo
   const dateToSubjectSessions: Record<string, string[]> = {};
@@ -178,17 +173,13 @@ export async function GET() {
     dotOverrides = parsed?.dotOverrides ?? {};
   } catch { dotOverrides = {}; }
 
-  // consistencyDots: todos os dias do mês atual (1º ao último)
-  // Dias passados/hoje: status real; dias futuros: "future"
-  const consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" | "future" }[] = [];
-  for (let i = 0; i < lastDayOfMonth; i++) {
-    const ds = toBRDate(new Date(firstOfMonthMs + i * msPerDay));
-    if (ds > todayDS) {
-      consistencyDots.push({ date: ds, studied: false, status: "future" });
-    } else {
-      const status = dotOverrides[ds] ?? getDayStatus(ds);
-      consistencyDots.push({ date: ds, studied: status !== "none", status });
-    }
+  const consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" }[] = [];
+  const daysToShow = Math.min(totalDays, 90);
+  for (let i = daysToShow - 1; i >= 0; i--) {
+    const ds = toBRDate(new Date(todayMs - i * msPerDay));
+    // Override manual tem prioridade sobre cálculo automático
+    const status = dotOverrides[ds] ?? getDayStatus(ds);
+    consistencyDots.push({ date: ds, studied: status !== "none", status });
   }
 
   // ── Estudos de hoje ───────────────────────────────────────────────────────
