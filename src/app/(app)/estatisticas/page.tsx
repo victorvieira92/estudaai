@@ -162,7 +162,7 @@ interface SubjectDetail {
   subjectName: string; totalHours: number; totalQuestions: number;
   totalCorrect: number; totalWrong: number; accuracy: number | null;
   pendingErrors: number; totalErrors: number; totalSessions: number;
-  byPdf:   { title: string; hours: number; pages: number; questions: number; accuracy: number | null }[];
+  byPdf:   { title: string; hours: number; pages: number; questions: number; correct: number; accuracy: number | null }[];
   byTopic: { name: string; hours: number; questions: number; accuracy: number | null }[];
   weeklyEvolution: { label: string; correct: number; wrong: number; hours: number }[];
   errorDistribution: { type: string; label: string; count: number }[];
