@@ -138,7 +138,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                 {[
                   { icon: Clock,        label: "Tempo total",      value: fmtH(data.totalHours),       sub: `${data.totalSessions} sessões` },
                   { icon: TrendingUp,   label: "Questões",         value: String(data.totalQuestions),  sub: data.accuracy !== null ? `${data.accuracy}% de acerto` : "sem questões" },
-                  { icon: FileText,     label: "Páginas lidas",    value: String(data.byPdf.reduce((a,p)=>a+p.pages,0)||"—"), sub: `${data.byPdf.length} PDFs` },
+                  { icon: FileText,     label: "Páginas lidas",    value: String((data.byPdf ?? []).reduce((a,p)=>a+p.pages,0)||"—"), sub: `${(data.byPdf ?? []).length} PDFs` },
                   { icon: AlertCircle,  label: "Erros no caderno", value: String(data.totalErrors),     sub: `${data.pendingErrors} pendentes` },
                 ].map(({ icon: Icon, label, value, sub }) => (
                   <div key={label} className="bg-gray-50 rounded-2xl p-4">
