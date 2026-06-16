@@ -89,8 +89,20 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
 
   useEffect(() => {
     setLoading(true);
+    setData(null);
     fetch(`/api/statistics/subject?subjectId=${subjectId}&period=${period}`)
-      .then(r => r.json()).then(d => { setData(d); setLoading(false); })
+      .then(r => { if (!r.ok) throw new Error("404"); return r.json(); })
+      .then(d => {
+        setData({
+          ...d,
+          byPdf:             d.byPdf             ?? [],
+          byTopic:           d.byTopic           ?? [],
+          weeklyEvolution:   d.weeklyEvolution   ?? [],
+          errorDistribution: d.errorDistribution ?? [],
+          sessionHistory:    d.sessionHistory    ?? [],
+        });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [subjectId, period]);
 
@@ -160,7 +172,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                   <span className="flex items-center gap-1.5 text-xs text-gray-500"><span className="w-3 h-0.5 bg-red-400 inline-block rounded" style={{ backgroundImage: "repeating-linear-gradient(to right,#f87171 0,#f87171 4px,transparent 4px,transparent 7px)" }} />Erros</span>
                 </div>
                 <ResponsiveContainer width="100%" height={180}>
-                  <LineChart data={data.weeklyEvolution} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <LineChart data={data.weeklyEvolution ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="label" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
@@ -175,11 +187,11 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Tempo de estudo por PDF</h3>
-                  {data.byPdf.length === 0 ? (
+                  {(data.byPdf ?? []).length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">Nenhuma sessão com PDF registrado.</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(data.byPdf.length * 44 + 20, 120)}>
-                      <BarChart data={data.byPdf} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
+                    <ResponsiveContainer width="100%" height={Math.max((data.byPdf ?? []).length * 44 + 20, 120)}>
+                      <BarChart data={data.byPdf ?? []} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
                         <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => `${Math.round(v)}h`} />
                         <YAxis type="category" dataKey="title" width={90} tick={{ fontSize: 10 }} />
@@ -191,7 +203,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Questões por PDF</h3>
-                  <PdfQuestionsChart byPdf={data.byPdf} />
+                  <PdfQuestionsChart byPdf={data.byPdf ?? []} />
                 </div>
               </div>
 
@@ -199,12 +211,12 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Tipos de erro — caderno</h3>
-                  {data.errorDistribution.length === 0 ? (
+                  {(data.errorDistribution ?? []).length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">Nenhum erro registrado nesta matéria.</p>
                   ) : (
                     <>
                       <div className="flex flex-wrap gap-2 mb-3">
-                        {data.errorDistribution.slice(0,5).map(e => (
+                        {(data.errorDistribution ?? []).slice(0,5).map(e => (
                           <span key={e.type} className="flex items-center gap-1 text-xs text-gray-500">
                             <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: ERROR_COLORS[e.type] ?? "#888" }}/>
                             {e.label} ({e.count})
@@ -213,8 +225,8 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                       </div>
                       <ResponsiveContainer width="100%" height={160}>
                         <PieChart>
-                          <Pie data={data.errorDistribution} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={65} innerRadius={35} paddingAngle={2}>
-                            {data.errorDistribution.map(e => (
+                          <Pie data={data.errorDistribution ?? []} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={65} innerRadius={35} paddingAngle={2}>
+                            {(data.errorDistribution ?? []).map(e => (
                               <Cell key={e.type} fill={ERROR_COLORS[e.type] ?? "#888"} />
                             ))}
                           </Pie>
@@ -226,12 +238,12 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                 </div>
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Tópicos com mais horas</h3>
-                  {data.byTopic.length === 0 ? (
+                  {(data.byTopic ?? []).length === 0 ? (
                     <p className="text-xs text-gray-400 text-center py-4">Nenhum tópico registrado.</p>
                   ) : (
                     <div className="space-y-2">
-                      {data.byTopic.slice(0,7).map(t => {
-                        const maxH = Math.max(...data.byTopic.map(x => x.hours), 0.1);
+                      {(data.byTopic ?? []).slice(0,7).map(t => {
+                        const maxH = Math.max(...(data.byTopic ?? []).map(x => x.hours), 0.1);
                         const pct  = Math.round((t.hours / maxH) * 100);
                         return (
                           <div key={t.name}>
@@ -273,7 +285,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                      {data.sessionHistory.map(s => (
+                      {(data.sessionHistory ?? []).map(s => (
                         <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
                             {new Date(s.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
@@ -296,7 +308,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
                           </td>
                         </tr>
                       ))}
-                      {data.sessionHistory.length === 0 && (
+                      {(data.sessionHistory ?? []).length === 0 && (
                         <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-sm">Nenhuma sessão no período selecionado.</td></tr>
                       )}
                     </tbody>
