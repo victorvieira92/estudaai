@@ -31,7 +31,7 @@ interface Stats {
   studiedDays:     number;
   totalDays:       number;
   consistency:     number;
-  consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" }[];
+  consistencyDots: { date: string; studied: boolean; status: "done" | "partial" | "none" | "future" }[];
   todayHours:      number;
   todayQuestions:  number;
   todayBySubject:  { name: string; hours: number }[];
@@ -314,7 +314,7 @@ export default function DashboardPage() {
 
           <div className="flex flex-wrap gap-1.5">
             {stats?.consistencyDots.map((dot, i) => {
-              const isFuture = dot.date > new Date().toISOString().slice(0,10);
+              const isFuture = dot.status === "future";
                       if (dotEditMode && !isFuture) {
                 return (
                   <div key={i} className="relative group">
