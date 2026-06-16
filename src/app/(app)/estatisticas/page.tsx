@@ -148,7 +148,6 @@ function MetasSemanal({ weekTotalHours, weekTotalQ, weeklyGoalHours, userId }: {
         <Bar pct={pctQ} color="#8B5CF6" />
       </div>
     </div>
-    </div>
   );
 }
 
