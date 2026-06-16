@@ -69,7 +69,7 @@ export async function GET(req: Request) {
   const totalCorrect   = filtered.reduce((a, s) => a + s.correct, 0);
   const totalWrong     = filtered.reduce((a, s) => a + s.wrong, 0);
   const accuracy       = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null;
-  const pendingErrors  = errorNotes.filter(e => e.pending !== false).length;
+  const pendingErrors  = errorNotes.filter(e => !e.nextReviewAt || e.nextReviewAt <= new Date()).length;
   const totalErrors    = errorNotes.length;
 
   // ── Páginas lidas — via JSON notes ──────────────────────────────────────
