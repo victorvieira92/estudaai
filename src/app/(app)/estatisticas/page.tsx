@@ -148,14 +148,6 @@ function MetasSemanal({ weekTotalHours, weekTotalQ, weeklyGoalHours, userId }: {
         <Bar pct={pctQ} color="#8B5CF6" />
       </div>
     </div>
-
-      {modalSubject && (
-        <SubjectModal
-          subjectId={modalSubject.id}
-          subjectName={modalSubject.name}
-          onClose={() => setModalSubject(null)}
-        />
-      )}
     </div>
   );
 }
@@ -824,6 +816,14 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      {modalSubject && (
+        <SubjectModal
+          subjectId={modalSubject.id}
+          subjectName={modalSubject.name}
+          onClose={() => setModalSubject(null)}
+        />
+      )}
     </div>
   );
 }
