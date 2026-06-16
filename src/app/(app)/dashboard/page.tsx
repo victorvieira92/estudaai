@@ -312,25 +312,30 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="flex flex-wrap gap-1.5">
+          <div
+            className="grid gap-1.5"
+            style={{ gridTemplateColumns: `repeat(${stats?.consistencyDots.length ?? 30}, minmax(0, 1fr))` }}
+          >
             {stats?.consistencyDots.map((dot, i) => {
               const isFuture = dot.status === "future";
-                      if (dotEditMode && !isFuture) {
+              const dayNum = parseInt(dot.date.slice(8), 10);
+              if (dotEditMode && !isFuture) {
                 return (
                   <div key={i} className="relative group">
                     <div
                       title={`${dot.date} — clique para alterar`}
-                      className={`w-6 h-6 rounded-md flex items-center justify-center cursor-pointer ring-2 ring-offset-1 ring-teal-400 ${
+                      className={`aspect-square rounded-md flex flex-col items-center justify-center cursor-pointer ring-2 ring-offset-1 ring-teal-400 ${
                         dot.status === "done"    ? "bg-green-500"
                         : dot.status === "partial" ? "bg-yellow-400"
                         : "bg-red-400"
                       }`}>
-                      {dot.status === "done"    && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                      {dot.status === "partial" && <span className="text-white font-bold text-[10px]">~</span>}
-                      {dot.status === "none"    && <span className="text-white font-bold text-[10px]">✕</span>}
+                      <span className="text-white font-bold leading-none" style={{ fontSize: "clamp(7px, 1vw, 11px)" }}>{dayNum}</span>
+                      {dot.status === "done"    && <CheckCircle className="w-2.5 h-2.5 text-white mt-0.5" />}
+                      {dot.status === "partial" && <span className="text-white font-bold leading-none mt-0.5" style={{ fontSize: "8px" }}>~</span>}
+                      {dot.status === "none"    && <span className="text-white font-bold leading-none mt-0.5" style={{ fontSize: "8px" }}>✕</span>}
                     </div>
                     {/* Mini menu ao hover */}
-                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 w-32">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col gap-1 bg-white border border-gray-200 rounded-xl shadow-lg p-2 z-50 w-32 mb-1">
                       <p className="text-[10px] text-gray-400 font-medium mb-1 text-center">{dot.date.slice(5).replace("-", "/")}</p>
                       {(["done", "partial", "none", "auto"] as const).map(s => (
                         <button key={s} onClick={() => saveDotOverride(dot.date, s)}
@@ -349,20 +354,25 @@ export default function DashboardPage() {
               }
               return (
                 <div key={i} title={dot.date}
-                  className={`w-6 h-6 rounded-md flex items-center justify-center ${
-                    isFuture              ? "bg-gray-100"
+                  className={`aspect-square rounded-md flex flex-col items-center justify-center ${
+                    isFuture              ? "bg-gray-100 border border-gray-200"
                     : dot.status === "done"    ? "bg-green-500"
                     : dot.status === "partial" ? "bg-yellow-400"
                     : "bg-red-400"
                   }`}>
-                  {dot.status === "done"    && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                  {dot.status === "partial" && <span className="text-white font-bold text-[10px]">~</span>}
-                  {dot.status === "none"    && !isFuture && <span className="text-white font-bold text-[10px]">✕</span>}
+                  <span
+                    className={`font-medium leading-none ${isFuture ? "text-gray-400" : "text-white"}`}
+                    style={{ fontSize: "clamp(7px, 1vw, 11px)" }}>
+                    {dayNum}
+                  </span>
+                  {!isFuture && dot.status === "done"    && <CheckCircle className="w-2.5 h-2.5 text-white mt-0.5" />}
+                  {!isFuture && dot.status === "partial" && <span className="text-white font-bold leading-none mt-0.5" style={{ fontSize: "8px" }}>~</span>}
+                  {!isFuture && dot.status === "none"    && <span className="text-white font-bold leading-none mt-0.5" style={{ fontSize: "8px" }}>✕</span>}
                 </div>
               );
             })}
-            {!stats && Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className="w-6 h-6 rounded-md bg-gray-100 animate-pulse" />
+            {!stats && Array.from({ length: 30 }).map((_, i) => (
+              <div key={i} className="aspect-square rounded-md bg-gray-100 animate-pulse" />
             ))}
           </div>
           <div className="flex items-center gap-3 mt-3 text-xs text-gray-400">
