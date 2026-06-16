@@ -169,6 +169,31 @@ interface SubjectDetail {
   sessionHistory: { id: string; date: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null; pdfTitle: string; topicName: string }[];
 }
 
+function PdfQuestionsChart({ byPdf }: { byPdf: { title: string; questions: number; correct: number; pages: number; hours: number; accuracy: number | null }[] }) {
+  const pdfQData = byPdf
+    .filter(p => p.questions > 0)
+    .map(p => ({
+      title:   p.title,
+      acertos: p.correct,
+      erros:   Math.max(0, p.questions - p.correct),
+    }));
+  if (pdfQData.length === 0) {
+    return <p className="text-xs text-gray-400 text-center py-4">Nenhuma questão registrada por PDF.</p>;
+  }
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(pdfQData.length * 44 + 20, 120)}>
+      <BarChart data={pdfQData} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
+        <XAxis type="number" tick={{ fontSize: 10 }} />
+        <YAxis type="category" dataKey="title" width={90} tick={{ fontSize: 10 }} />
+        <Tooltip formatter={(v: number, name: string) => [v, name]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+        <Bar dataKey="acertos" fill="#1D9E75" radius={[0,0,0,0] as [number,number,number,number]} name="Acertos" stackId="q" />
+        <Bar dataKey="erros"   fill="#E24B4A" radius={[0,4,4,0] as [number,number,number,number]} name="Erros"   stackId="q" />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 function SubjectModal({ subjectId, subjectName, onClose }: { subjectId: string; subjectName: string; onClose: () => void }) {
   const [period, setPeriod] = React.useState(30);
   const [data, setData] = React.useState<SubjectDetail | null>(null);
@@ -279,21 +304,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: { subjectId: string; 
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Questões por PDF</h3>
-                  {data.byPdf.filter(p => p.questions > 0).length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-4">Nenhuma questão registrada por PDF.</p>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(data.byPdf.filter(p=>p.questions>0).length * 44 + 20, 120)}>
-                      <BarChart data={data.byPdf.filter(p=>p.questions>0)} layout="vertical" margin={{ top: 0, right: 36, left: 8, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 10 }} />
-                        <YAxis type="category" dataKey="title" width={90} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(v: number, name: string) => [v, name === "correct" ? "Acertos" : "Erros"]} contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                        <Bar dataKey="correct" fill="#1D9E75" radius={[0,0,0,0]} name="Acertos" stackId="q" />
-                        <Bar dataKey="questions" fill="#E24B4A" radius={[0,4,4,0]} name="Erros" stackId="q"
-                          data={data.byPdf.filter(p=>p.questions>0).map(p=>({ ...p, questions: p.questions - p.correct < 0 ? 0 : p.questions - p.correct }))} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
+                    <PdfQuestionsChart byPdf={data.byPdf} />
                 </div>
               </div>
 
