@@ -73,7 +73,7 @@ export async function GET(req: Request) {
   const totalErrors    = errorNotes.length;
 
   // ── Páginas lidas — via JSON notes ──────────────────────────────────────
-  type NotesJson = { pdfTitle?: string; topicName?: string; category?: string; comment?: string };
+  type NotesJson = { pdfTitle?: string; topicName?: string; category?: string; comment?: string; endPage?: number; startPage?: number };
   const parsedNotes = filtered.map(s => {
     let n: NotesJson = {};
     try { n = JSON.parse(s.notes ?? "{}"); } catch {}
