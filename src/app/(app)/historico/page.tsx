@@ -18,6 +18,8 @@ interface Session {
   topicName:      string;
   pdfTitle:       string;
   comment:        string;
+  startPage:      number;
+  endPage:        number;
 }
 
 interface DayGroup {
@@ -116,6 +118,7 @@ function EditPanel({
   const [topicName, setTopicName] = useState(session.topicName);
   const [pdfTitle,  setPdfTitle]  = useState(session.pdfTitle);
   const [comment,   setComment]   = useState(session.comment);
+  const [endPage,   setEndPage]   = useState(String(session.endPage ?? 0));
   // Data editável — inicializa com a data atual da sessão (BRT)
   const [studyDate, setStudyDate] = useState(toBRDate(session.createdAt));
 
@@ -195,13 +198,21 @@ function EditPanel({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {/* Material/PDF */}
         <div>
           <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Material</label>
           <input type="text" value={pdfTitle} onChange={e => setPdfTitle(e.target.value)}
             placeholder="Ex.: Aula 01"
             className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400" />
+        </div>
+
+        {/* Última página lida */}
+        <div>
+          <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Última página lida</label>
+          <input type="number" min="0" value={endPage} onChange={e => setEndPage(e.target.value)}
+            placeholder="0"
+            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-teal-400 text-blue-600 font-bold" />
         </div>
 
         {/* Comentário */}
@@ -219,7 +230,7 @@ function EditPanel({
           Cancelar
         </button>
         <button
-          onClick={() => onSave({ category, studyTime, studyDate, correct: parseInt(correct)||0, wrong: parseInt(wrong)||0, topicName, pdfTitle, comment })}
+          onClick={() => onSave({ category, studyTime, studyDate, correct: parseInt(correct)||0, wrong: parseInt(wrong)||0, topicName, pdfTitle, comment, endPage: parseInt(endPage)||0 })}
           disabled={saving}
           className="px-4 py-1.5 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
           style={{ backgroundColor: BG }}>
@@ -288,7 +299,8 @@ export default function HistoricoPage() {
         hours,
         correct:   data.correct,
         wrong:     data.wrong,
-        studyDate: data.studyDate, // ← data editada
+        studyDate: data.studyDate,
+        endPage:   data.endPage,
       }),
     });
     setSaving(false); setEditId(null); load();

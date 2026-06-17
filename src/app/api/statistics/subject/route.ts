@@ -44,7 +44,7 @@ export async function GET(req: Request) {
   const [subject, sessions, errorNotes] = await Promise.all([
     prisma.subject.findFirst({
       where:   { id: subjectId, userId: uid },
-      include: { topics: { include: { pdfs: true } } },
+      include: { topics: { include: { pdfs: { include: { studyLogs: true } } } } },
     }),
     prisma.studySession.findMany({
       where:   { userId: uid, subjectId },
@@ -96,6 +96,16 @@ export async function GET(req: Request) {
     // pages = max(endPage) por PDF: progresso linear (até onde chegou no PDF)
     const end = (n as any).endPage ?? 0;
     if (end > pdfMap[title].pages) pdfMap[title].pages = end;
+  }
+
+  // Enriquece pages com lastPageStudied real do banco (cobre sessões antigas sem endPage no notes)
+  const allPdfs = (subject?.topics ?? []).flatMap(t => t.pdfs);
+  for (const pdf of allPdfs) {
+    const title = pdf.title?.trim();
+    if (!title) continue;
+    if (pdfMap[title] && pdf.lastPageStudied > pdfMap[title].pages) {
+      pdfMap[title].pages = pdf.lastPageStudied;
+    }
   }
 
   const byPdf = Object.values(pdfMap)

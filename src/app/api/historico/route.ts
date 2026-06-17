@@ -9,7 +9,7 @@ function toBRDate(date: Date): string {
 }
 
 function parseMeta(notes: string | null) {
-  if (!notes) return { category: "", topicName: "", pdfTitle: "", comment: "" };
+  if (!notes) return { category: "", topicName: "", pdfTitle: "", comment: "", startPage: 0, endPage: 0 };
   try {
     const p = JSON.parse(notes);
     return {
@@ -17,9 +17,11 @@ function parseMeta(notes: string | null) {
       topicName: p.topicName ?? "",
       pdfTitle:  p.pdfTitle  ?? "",
       comment:   p.comment   ?? "",
+      startPage: p.startPage ?? 0,
+      endPage:   p.endPage   ?? 0,
     };
   } catch {
-    return { category: "", topicName: "", pdfTitle: "", comment: notes };
+    return { category: "", topicName: "", pdfTitle: "", comment: notes, startPage: 0, endPage: 0 };
   }
 }
 
@@ -72,6 +74,8 @@ export async function GET(req: Request) {
         topicName:      meta.topicName,
         pdfTitle:       meta.pdfTitle,
         comment:        meta.comment,
+        startPage:      meta.startPage,
+        endPage:        meta.endPage,
       };
     }),
   }));
@@ -85,7 +89,7 @@ export async function PATCH(req: Request) {
   const uid = session.user.id as string;
 
   const body = await req.json();
-  const { id, category, topicName, pdfTitle, comment, hours, correct, wrong, studyDate } = body;
+  const { id, category, topicName, pdfTitle, comment, hours, correct, wrong, studyDate, endPage } = body;
 
   // Verifica posse — só edita se for do usuário logado
   const existing = await prisma.studySession.findFirst({
@@ -98,6 +102,7 @@ export async function PATCH(req: Request) {
   if (topicName !== undefined) meta.topicName = topicName;
   if (pdfTitle  !== undefined) meta.pdfTitle  = pdfTitle;
   if (comment   !== undefined) meta.comment   = comment;
+  if (endPage   !== undefined) (meta as any).endPage = Number(endPage);
 
   const updateData: Record<string, unknown> = { notes: JSON.stringify(meta) };
   if (hours   != null) updateData.studyHours = Number(hours);
