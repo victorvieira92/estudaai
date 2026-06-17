@@ -93,15 +93,9 @@ export async function GET(req: Request) {
     pdfMap[title].correct   += s.correct;
     pdfMap[title].wrong     += s.wrong;
     pdfMap[title].sessions  += 1;
-    // Páginas: endPage - startPage (campos diretos na sessão não existem, usamos notes)
-    // O campo notes guarda o JSON completo que veio do frontend; mas startPage/endPage
-    // foram salvos na sessão via API — não no notes. Precisamos checar se vieram na sessão.
-    // Como StudySession não tem startPage/endPage no schema, somamos 0 aqui.
-    // O frontend salva pdfTitle no notes JSON; pages são calculadas via notes se existirem.
-    const anyS = s as any;
-    const start = anyS.startPage ?? 0;
-    const end   = anyS.endPage   ?? 0;
-    if (end > start) pdfMap[title].pages += end - start;
+    // pages = max(endPage) por PDF: progresso linear (até onde chegou no PDF)
+    const end = (n as any).endPage ?? 0;
+    if (end > pdfMap[title].pages) pdfMap[title].pages = end;
   }
 
   const byPdf = Object.values(pdfMap)

@@ -36,6 +36,8 @@ export async function POST(req: Request) {
       topicName: body.topicName ?? "",
       pdfTitle:  body.pdfTitle  ?? "",
       comment:   body.comment   ?? "",
+      startPage,
+      endPage,
     });
 
     await prisma.$transaction(async (tx) => {
