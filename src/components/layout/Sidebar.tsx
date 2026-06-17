@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 const nav = [
-  { href: "/dashboard",        label: "Dashboard",         icon: LayoutDashboard },
+  { href: "/dashboard",        label: "Painel",            icon: LayoutDashboard },
   { href: "/historico",        label: "Histórico",         icon: History },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
@@ -22,7 +22,6 @@ const nav = [
   { href: "/revisoes",         label: "Revisoes",          icon: RefreshCw },
   { href: "/caderno",          label: "Caderno de Erros",  icon: FileText },
   { href: "/resumos",          label: "Resumos",           icon: FolderOpen },
-  { href: "/estatisticas",     label: "Estatisticas",      icon: BarChart2 },
   { href: "/perfil",           label: "Minha Conta",       icon: UserCircle },
 ];
 
