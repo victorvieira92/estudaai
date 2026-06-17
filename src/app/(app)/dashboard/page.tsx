@@ -40,7 +40,7 @@ interface SubjectDetail {
   byTopic: { name: string; hours: number; questions: number; accuracy: number | null }[];
   weeklyEvolution: { label: string; correct: number; wrong: number; hours: number }[];
   errorDistribution: { type: string; label: string; count: number }[];
-  sessionHistory: { id: string; date: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null; pdfTitle: string; topicName: string }[];
+  sessionHistory: { id: string; date: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null; pdfTitle: string; topicName: string; category?: string; endPage?: number; comment?: string }[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -159,6 +159,136 @@ function PdfQuestionsChart({ byPdf }: {
 }
 
 // ── SubjectModal ──────────────────────────────────────────────────────────────
+
+function SessionHistoryCards({ sessions }: {
+  sessions: { id: string; date: string; hours: number; questions: number; correct: number; wrong: number; accuracy: number | null; pdfTitle: string; topicName: string; category?: string; endPage?: number; comment?: string }[]
+}) {
+  const [expandedId, setExpandedId] = React.useState<string | null>(null);
+
+  if (sessions.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+        Nenhuma sessão no período selecionado.
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-gray-700">Histórico de sessões</h3>
+        <span className="text-xs text-gray-400">{sessions.length} sessão{sessions.length !== 1 ? "ões" : ""}</span>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {sessions.map(s => {
+          const isOpen = expandedId === s.id;
+          const dateStr = new Date(s.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+          const accColor = s.accuracy === null ? "" : s.accuracy >= 70 ? "bg-green-100 text-green-700" : s.accuracy >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700";
+
+          return (
+            <div key={s.id}>
+              {/* Linha principal — clicável */}
+              <button
+                onClick={() => setExpandedId(isOpen ? null : s.id)}
+                className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left">
+
+                {/* Data */}
+                <div className="shrink-0 w-16 text-center">
+                  <p className="text-base font-bold text-gray-900 leading-none">{dateStr.slice(0,5)}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{dateStr.slice(6)}</p>
+                </div>
+
+                {/* PDF + Tópico */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{s.pdfTitle || "Sem material"}</p>
+                  {s.topicName && <p className="text-xs text-gray-400 truncate mt-0.5">{s.topicName}</p>}
+                  {s.category && (
+                    <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{s.category}</span>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-center hidden sm:block">
+                    <p className="text-[10px] text-gray-400">Tempo</p>
+                    <p className="text-xs font-semibold text-gray-700">{s.hours > 0 ? fmtH(s.hours) : "—"}</p>
+                  </div>
+                  {s.questions > 0 && (
+                    <>
+                      <div className="text-center">
+                        <p className="text-[10px] text-gray-400">✓ / ✗</p>
+                        <p className="text-xs font-semibold">
+                          <span className="text-green-600">{s.correct}</span>
+                          <span className="text-gray-300 mx-0.5">/</span>
+                          <span className="text-red-500">{s.wrong}</span>
+                        </p>
+                      </div>
+                      {s.accuracy !== null && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${accColor}`}>{s.accuracy}%</span>
+                      )}
+                    </>
+                  )}
+                  {s.questions === 0 && <span className="text-xs text-gray-300">sem questões</span>}
+                  {/* Chevron */}
+                  <svg className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Detalhes expandidos */}
+              {isOpen && (
+                <div className="px-5 pb-4 pt-1 bg-gray-50 border-t border-gray-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Data completa</p>
+                      <p className="text-sm font-semibold text-gray-800">{dateStr}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Tempo de estudo</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.hours > 0 ? fmtH(s.hours) : "—"}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Categoria</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.category || "—"}</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Última página</p>
+                      <p className="text-sm font-semibold text-gray-800">{s.endPage && s.endPage > 0 ? `Pág. ${s.endPage}` : "—"}</p>
+                    </div>
+                  </div>
+                  {s.questions > 0 && (
+                    <div className="grid grid-cols-3 gap-3 mt-3">
+                      <div className="bg-white rounded-xl p-3 border border-gray-100 text-center">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Total de questões</p>
+                        <p className="text-lg font-bold text-gray-800">{s.questions}</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-3 border border-gray-100 text-center">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Acertos</p>
+                        <p className="text-lg font-bold text-green-600">{s.correct}</p>
+                      </div>
+                      <div className="bg-white rounded-xl p-3 border border-gray-100 text-center">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">Erros</p>
+                        <p className="text-lg font-bold text-red-500">{s.wrong}</p>
+                      </div>
+                    </div>
+                  )}
+                  {s.comment && (
+                    <div className="mt-3 bg-white rounded-xl p-3 border border-gray-100">
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">💬 Comentário</p>
+                      <p className="text-sm text-gray-700">{s.comment}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SubjectModal({ subjectId, subjectName, onClose }: {
   subjectId: string; subjectName: string; onClose: () => void;
 }) {
@@ -343,49 +473,7 @@ function SubjectModal({ subjectId, subjectName, onClose }: {
               </div>
 
               {/* Histórico */}
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100">
-                  <h3 className="text-sm font-semibold text-gray-700">Histórico de sessões</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                        <th className="text-left px-5 py-3 font-semibold">Data</th>
-                        <th className="text-left px-3 py-3 font-semibold">PDF / Tópico</th>
-                        <th className="text-right px-3 py-3 font-semibold">Tempo</th>
-                        <th className="text-right px-3 py-3 font-semibold text-green-600">✓</th>
-                        <th className="text-right px-3 py-3 font-semibold text-red-500">✗</th>
-                        <th className="text-right px-5 py-3 font-semibold">%</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {data.sessionHistory.map(s => (
-                        <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-5 py-3 text-gray-500 text-xs whitespace-nowrap">
-                            {new Date(s.date + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                          </td>
-                          <td className="px-3 py-3">
-                            <p className="font-medium text-gray-800 text-xs truncate max-w-[200px]">{s.pdfTitle || "—"}</p>
-                            {s.topicName && <p className="text-xs text-gray-400 truncate max-w-[200px]">{s.topicName}</p>}
-                          </td>
-                          <td className="px-3 py-3 text-right text-gray-600 text-xs">{s.hours > 0 ? fmtH(s.hours) : "-"}</td>
-                          <td className="px-3 py-3 text-right text-green-600 font-semibold text-xs">{s.correct > 0 ? s.correct : <span className="text-gray-300">0</span>}</td>
-                          <td className="px-3 py-3 text-right text-red-500 font-semibold text-xs">{s.wrong > 0 ? s.wrong : <span className="text-gray-300">0</span>}</td>
-                          <td className="px-5 py-3 text-right">
-                            {s.accuracy !== null ? (
-                              <span className={`font-bold text-xs px-2 py-0.5 rounded-full ${s.accuracy >= 70 ? "bg-green-100 text-green-700" : s.accuracy >= 50 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"}`}>{s.accuracy}%</span>
-                            ) : <span className="text-gray-300 text-xs">-</span>}
-                          </td>
-                        </tr>
-                      ))}
-                      {data.sessionHistory.length === 0 && (
-                        <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-sm">Nenhuma sessão no período.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              <SessionHistoryCards sessions={data.sessionHistory} />
             </>
           )}
         </div>

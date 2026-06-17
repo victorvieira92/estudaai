@@ -169,6 +169,8 @@ export async function GET(req: Request) {
         pdfTitle:  n.pdfTitle  ?? "",
         topicName: n.topicName ?? "",
         category:  n.category  ?? "",
+        endPage:   n.endPage   ?? 0,
+        comment:   n.comment   ?? "",
       };
     });
 
