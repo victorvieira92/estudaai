@@ -248,6 +248,7 @@ export default function HistoricoPage() {
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
 
+  const [filterSubjectId, setFilterSubjectId] = useState<string>("all");
   const [commentId,   setCommentId]   = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
   const [editId,      setEditId]      = useState<string | null>(null);
@@ -313,10 +314,19 @@ export default function HistoricoPage() {
     setSaving(false); setDeleteId(null); load();
   };
 
-  const totalHours     = data.reduce((a, g) => a + g.totalHours, 0);
-  const totalQuestions = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.questions, a), 0);
-  const totalCorrect   = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.correct, a), 0);
-  const totalWrong     = data.reduce((a, g) => g.sessions.reduce((b, s) => b + s.wrong, a), 0);
+  const filteredData = filterSubjectId === "all"
+    ? data
+    : data.map(g => ({
+        ...g,
+        sessions:   g.sessions.filter(s => s.subjectId === filterSubjectId),
+        totalHours: g.sessions.filter(s => s.subjectId === filterSubjectId).reduce((a, s) => a + s.hours, 0),
+        totalHoursFormatted: fmtH(g.sessions.filter(s => s.subjectId === filterSubjectId).reduce((a, s) => a + s.hours, 0)),
+      })).filter(g => g.sessions.length > 0);
+
+  const totalHours     = filteredData.reduce((a, g) => a + g.totalHours, 0);
+  const totalQuestions = filteredData.reduce((a, g) => g.sessions.reduce((b, s) => b + s.questions, a), 0);
+  const totalCorrect   = filteredData.reduce((a, g) => g.sessions.reduce((b, s) => b + s.correct, a), 0);
+  const totalWrong     = filteredData.reduce((a, g) => g.sessions.reduce((b, s) => b + s.wrong, a), 0);
   const globalAccuracy = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : null;
 
   const allSessions = data.flatMap(g => g.sessions);
@@ -342,7 +352,7 @@ export default function HistoricoPage() {
               color: globalAccuracy !== null ? (globalAccuracy >= 70 ? "text-green-600" : globalAccuracy >= 50 ? "text-yellow-600" : "text-red-600") : "text-gray-400",
             },
             { label: "TOTAL QUESTÕES", value: totalQuestions, color: "text-purple-600" },
-            { label: "DIAS ESTUDADOS", value: data.length,    color: "text-gray-900"  },
+            { label: "DIAS ESTUDADOS", value: filteredData.length, color: "text-gray-900" },
           ].map(({ label, value, sub, color }) => (
             <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
               <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
@@ -352,6 +362,30 @@ export default function HistoricoPage() {
           ))}
         </div>
 
+        {/* Filtro por matéria */}
+        {subjects.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filtrar por matéria:</span>
+            <button
+              onClick={() => setFilterSubjectId("all")}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+              style={filterSubjectId === "all" ? { backgroundColor: BG, color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+              Todas
+            </button>
+            {subjects.map(sub => (
+              <button
+                key={sub.id}
+                onClick={() => setFilterSubjectId(sub.id)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                style={filterSubjectId === sub.id
+                  ? { backgroundColor: getColor(sub.id), color: "#fff" }
+                  : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+                {sub.name}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Lista */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -360,11 +394,13 @@ export default function HistoricoPage() {
         ) : data.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
             <Clock className="w-10 h-10 text-gray-200 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">Nenhum estudo registrado ainda</p>
+            <p className="text-gray-500 font-medium">
+              {filterSubjectId === "all" ? "Nenhum estudo registrado ainda" : "Nenhum registro para esta matéria"}
+            </p>
           </div>
         ) : (
           <div className="space-y-6">
-            {data.map(group => {
+            {filteredData.map(group => {
               const { day, dayOfWeek, month, isToday } = parseDateLabel(group.date);
               return (
                 <div key={group.date}>
