@@ -442,6 +442,10 @@ export default function MateriasPage() {
                       </div>
                     </button>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button type="button" onClick={() => setOpenAddTopic(p => ({ ...p, [s.id]: !p[s.id] }))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 mr-1 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
+                        <Plus className="w-3.5 h-3.5"/>Tópico
+                      </button>
                       <button onClick={() => { setEditingSubject(s.id); setEditSubjectData({ name: s.name, editalWeight: s.editalWeight, criticality: s.criticality }); setExpanded(s.id); }}
                         className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"><Pencil className="w-3.5 h-3.5"/></button>
                       <button onClick={() => deleteSubject(s.id)}
@@ -473,8 +477,8 @@ export default function MateriasPage() {
                       </div>
                     )}
 
-                    {/* Novo tópico — escondido atrás de um botão */}
-                    {openAddTopic[s.id] ? (
+                    {/* Novo tópico — formulário acionado pelo botão "+ Tópico" no header da matéria */}
+                    {openAddTopic[s.id] && (
                       <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); setOpenAddTopic(p => ({ ...p, [s.id]: false })); }} className="flex gap-2">
                         <input
                           autoFocus
@@ -491,17 +495,12 @@ export default function MateriasPage() {
                           Cancelar
                         </button>
                       </form>
-                    ) : (
-                      <button type="button" onClick={() => setOpenAddTopic(p => ({ ...p, [s.id]: true }))}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
-                        <Plus className="w-3.5 h-3.5"/>Adicionar tópico
-                      </button>
                     )}
 
                     {s.topics.map(t => (
                       <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-5">
-                        {/* Header tópico */}
-                        <div className="flex items-center gap-3 mb-4">
+                        {/* Header tópico + ações */}
+                        <div className="flex items-center gap-3 mb-4 flex-wrap">
                           {editingTopic === t.id ? (
                             <div className="flex items-center gap-2 flex-1">
                               <input value={editTopicName} onChange={e => setEditTopicName(e.target.value)}
@@ -511,17 +510,25 @@ export default function MateriasPage() {
                             </div>
                           ) : (
                             <>
-                              <p className="font-bold text-gray-900 flex-1">{t.name}</p>
+                              <p className="font-bold text-gray-900 flex-1 min-w-[140px]">{t.name}</p>
+                              <button type="button" onClick={() => setOpenAddPdf(p => ({ ...p, [t.id]: !p[t.id] }))}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
+                                <Plus className="w-3.5 h-3.5"/>Aula
+                              </button>
                               <button onClick={() => { setEditingTopic(t.id); setEditTopicName(t.name); }}
-                                className="px-3 py-2 bg-gray-900 text-white rounded-xl text-xs font-bold">Editar tópico</button>
+                                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors" title="Editar tópico">
+                                <Pencil className="w-3.5 h-3.5"/>
+                              </button>
                               <button onClick={() => deleteTopic(t.id)}
-                                className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-bold">Excluir tópico</button>
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Excluir tópico">
+                                <Trash2 className="w-3.5 h-3.5"/>
+                              </button>
                             </>
                           )}
                         </div>
 
-                        {/* Adicionar PDF — escondido atrás de um botão */}
-                        {openAddPdf[t.id] ? (
+                        {/* Adicionar PDF — escondido atrás do botão acima */}
+                        {openAddPdf[t.id] && (
                           <form onSubmit={e => { addPdf(e); setOpenAddPdf(p => ({ ...p, [t.id]: false })); }} className="flex gap-2 flex-wrap items-end mb-4">
                             <div className="flex-1">
                               <input
@@ -549,11 +556,6 @@ export default function MateriasPage() {
                               Cancelar
                             </button>
                           </form>
-                        ) : (
-                          <button type="button" onClick={() => setOpenAddPdf(p => ({ ...p, [t.id]: true }))}
-                            className="flex items-center gap-1.5 px-3 py-2 mb-4 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
-                            <Plus className="w-3.5 h-3.5"/>Adicionar aula/PDF
-                          </button>
                         )}
 
                         {/* PDFs */}
