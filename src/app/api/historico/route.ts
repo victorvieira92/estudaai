@@ -119,6 +119,49 @@ export async function PATCH(req: Request) {
   }
 
   const updated = await prisma.studySession.update({ where: { id }, data: updateData });
+
+  // Sincroniza a página lida com o registro do PDF (fonte usada pela aba Matérias)
+  // Sempre que endPage muda, propaga para Pdf.lastPageStudied — usando o MAIOR endPage
+  // entre todas as sessões daquele PDF (progresso linear: até onde o usuário chegou)
+  if (endPage !== undefined && meta.pdfTitle && meta.pdfTitle.trim()) {
+    try {
+      const pdf = await prisma.pdf.findFirst({
+        where: {
+          title: { equals: meta.pdfTitle.trim(), mode: "insensitive" },
+          topic: { subject: { userId: uid, id: existing.subjectId } },
+        },
+      });
+      if (pdf) {
+        // Recalcula o maior endPage entre todas as sessões deste PDF (já considerando a edição atual)
+        const allSubjectSessions = await prisma.studySession.findMany({
+          where: { userId: uid, subjectId: existing.subjectId },
+        });
+        let maxEndPage = 0;
+        for (const s of allSubjectSessions) {
+          try {
+            const n = JSON.parse(s.notes ?? "{}");
+            const title = (n.pdfTitle ?? "").trim().toLowerCase();
+            if (title === meta.pdfTitle.trim().toLowerCase()) {
+              const ep = s.id === id ? Number(endPage) : Number(n.endPage ?? 0);
+              if (ep > maxEndPage) maxEndPage = ep;
+            }
+          } catch {}
+        }
+        const finalTotal   = pdf.totalPages;
+        const shouldFinish = finalTotal > 0 && maxEndPage >= finalTotal;
+        await prisma.pdf.update({
+          where: { id: pdf.id },
+          data: {
+            lastPageStudied: maxEndPage,
+            ...(shouldFinish ? { completed: true } : {}),
+          },
+        });
+      }
+    } catch (e) {
+      console.error("[historico PATCH] erro ao sincronizar página com Pdf:", e);
+    }
+  }
+
   return NextResponse.json(updated);
 }
 

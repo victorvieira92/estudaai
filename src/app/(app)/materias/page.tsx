@@ -40,27 +40,21 @@ function accuracy(correct: number, total: number) { return total > 0 ? Math.roun
 function fmtHours(h: number) { return `${h.toFixed(1)}h`; }
 
 // ── PdfCard ──────────────────────────────────────────────────────────────────
-function PdfCard({
+function PdfRow({
   pdf, subjectId, onReload, allSessions,
 }: {
   pdf: Pdf;
   subjectId: string;
   onReload: () => void;
-  allSessions: HistoricoSession[]; // já carregadas pela página pai
+  allSessions: HistoricoSession[];
 }) {
-  const [editingTitle, setEditingTitle] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(pdf.title);
-  const [editCompleted, setEditCompleted] = useState(pdf.completed);
   const [editTotalPages, setEditTotalPages] = useState(pdf.totalPages);
+  const [editLastPage, setEditLastPage] = useState(pdf.lastPageStudied);
   const [savingPdf, setSavingPdf] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
 
-  const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
-  const acc = accuracy(pdf.correctQuestions, pdf.questions);
-
-  // Filtra sessões do histórico que pertencem a este PDF
-  // Regra: match exato por pdfTitle. Só usa topicName se pdfTitle estiver vazio.
-  // Nunca usa includes — evita que "Aula 01" bata com "Aula 01 parte 2"
   const normalize = (str: string) => str.trim().toLowerCase();
   const pdfNorm   = normalize(pdf.title);
 
@@ -68,28 +62,35 @@ function PdfCard({
     if (s.subjectId !== subjectId) return false;
     const titleNorm = normalize(s.pdfTitle);
     const topicNorm = normalize(s.topicName);
-    // Se a sessão tem pdfTitle preenchido: match exato com o título do PDF
     if (titleNorm) return titleNorm === pdfNorm;
-    // Se não tem pdfTitle: match exato pelo topicName
     if (topicNorm) return topicNorm === pdfNorm;
     return false;
   });
 
-  // KPIs calculados direto das sessões (fonte única de verdade = StudySession)
   const totalHours     = pdfSessions.reduce((a, s) => a + s.hours, 0);
   const totalQuestions = pdfSessions.reduce((a, s) => a + s.questions, 0);
   const totalCorrect   = pdfSessions.reduce((a, s) => a + s.correct, 0);
   const totalWrong     = pdfSessions.reduce((a, s) => a + s.wrong, 0);
   const totalAcc       = accuracy(totalCorrect, totalQuestions);
 
+  const pct = pdf.totalPages > 0 ? Math.min(100, Math.round((pdf.lastPageStudied / pdf.totalPages) * 100)) : 0;
+
+  const statusIcon = pdf.completed ? "✅" : pdf.lastPageStudied > 0 ? "🔵" : "⭕";
+
   const savePdf = async () => {
     setSavingPdf(true);
+    const shouldFinish = editTotalPages > 0 && editLastPage >= editTotalPages;
     await fetch(`/api/pdfs/${pdf.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: editTitle, completed: editCompleted, totalPages: editTotalPages }),
+      body: JSON.stringify({
+        title: editTitle,
+        totalPages: editTotalPages,
+        lastPageStudied: editLastPage,
+        completed: shouldFinish,
+      }),
     });
-    setEditingTitle(false);
+    setEditing(false);
     onReload();
     setSavingPdf(false);
   };
@@ -100,163 +101,125 @@ function PdfCard({
     onReload();
   };
 
-  const deleteSession = async (id: string) => {
-    if (!confirm("Excluir este registro de estudo?")) return;
-    await fetch(`/api/historico?id=${id}`, { method: "DELETE" });
-    onReload();
-  };
-
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5">
-      {/* Header do PDF */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        {editingTitle ? (
-          <div className="flex flex-1 items-center gap-2">
-            <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-              className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-            <input type="number" min="0" value={editTotalPages} onChange={e => setEditTotalPages(+e.target.value)}
-              placeholder="Total páginas"
-              className="w-32 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-            <label className="flex items-center gap-2 border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white cursor-pointer">
-              <input type="checkbox" checked={editCompleted} onChange={e => setEditCompleted(e.target.checked)} className="w-4 h-4"/>
-              Concluído
-            </label>
-            <button onClick={savePdf} disabled={savingPdf}
-              className="px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-              {savingPdf ? "..." : "Salvar"}
-            </button>
-            <button onClick={() => setEditingTitle(false)} className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-sm">
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3 flex-1">
-            <span className="text-lg">{pdf.completed ? "✅" : pdf.lastPageStudied > 0 ? "🔵" : "⭕"}</span>
-            <div className="flex-1">
-              <p className="font-bold text-gray-900">{pdf.title}</p>
-              {pdf.totalPages > 0 && (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Progresso: {pct}% · Página {pdf.lastPageStudied}/{pdf.totalPages}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => { setEditingTitle(true); setEditTitle(pdf.title); setEditCompleted(pdf.completed); setEditTotalPages(pdf.totalPages); }}
-              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
-              <Pencil className="w-3.5 h-3.5"/>
-            </button>
-            <button
-              onClick={() => fetch(`/api/pdfs/${pdf.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: !pdf.completed }) }).then(() => onReload())}
-              className={`p-1.5 rounded-lg transition-colors hover:bg-gray-200 ${pdf.completed ? "text-yellow-500" : "text-gray-400 hover:text-green-600"}`}
-              title={pdf.completed ? "Desmarcar" : "Marcar concluído"}>
-              <RotateCcw className="w-3.5 h-3.5"/>
-            </button>
-            <button onClick={deletePdf} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
-              <Trash2 className="w-3.5 h-3.5"/>
-            </button>
-          </div>
-        )}
-      </div>
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Linha principal — clicável */}
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-gray-50 transition-colors ${expanded ? "bg-gray-50" : ""}`}>
+        <span className="text-base shrink-0 w-[18px] text-center">{statusIcon}</span>
+        <p className="font-semibold text-sm text-gray-900 truncate" style={{ minWidth: 100, maxWidth: 140 }}>{pdf.title}</p>
+        <div className="flex items-center gap-2 flex-1 min-w-[110px]">
+          {pdf.totalPages > 0 ? (
+            <>
+              <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 100 ? "#16a34a" : "#2563eb" }} />
+              </div>
+              <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">{pdf.lastPageStudied}/{pdf.totalPages}</span>
+            </>
+          ) : (
+            <span className="text-xs text-gray-300">sem páginas</span>
+          )}
+        </div>
+        <span className="text-xs text-gray-500 w-12 text-right shrink-0">{totalHours > 0 ? fmtHours(totalHours) : "—"}</span>
+        <span className="text-xs text-gray-500 w-9 text-right shrink-0">{totalQuestions > 0 ? totalQuestions : "—"}</span>
+        <span className="text-xs text-green-600 font-medium w-9 text-right shrink-0">{totalCorrect > 0 ? totalCorrect : "—"}</span>
+        <span className="text-xs text-red-500 font-medium w-9 text-right shrink-0">{totalWrong > 0 ? totalWrong : "—"}</span>
+        <span className={`text-xs font-bold w-10 text-right shrink-0 ${totalAcc >= 70 ? "text-green-600" : totalAcc >= 50 ? "text-yellow-600" : totalAcc > 0 ? "text-red-600" : "text-gray-300"}`}>
+          {totalQuestions > 0 ? `${totalAcc}%` : "—"}
+        </span>
+        <span className="shrink-0 w-6 text-center text-gray-300">{expanded ? "▲" : "▼"}</span>
+      </button>
 
-      {/* KPIs calculados das sessões */}
-      <div className="mt-4 grid grid-cols-2 md:grid-cols-5 gap-3">
-        {[
-          { label: "Total horas",    value: fmtHours(totalHours),    color: "" },
-          { label: "Total questões", value: totalQuestions,           color: "" },
-          { label: "Total acertos",  value: totalCorrect,             color: "text-green-600" },
-          { label: "Total erros",    value: totalWrong,               color: "text-red-600" },
-          { label: "Acurácia",       value: `${totalAcc}%`,           color: totalAcc >= 70 ? "text-green-600" : totalAcc >= 50 ? "text-yellow-600" : totalAcc > 0 ? "text-red-600" : "" },
-        ].map(({ label, value, color }) => (
-          <div key={label} className="bg-white rounded-xl border border-gray-200 p-3">
-            <p className="text-xs text-gray-500">{label}</p>
-            <p className={`font-bold text-lg mt-0.5 ${color}`}>{value}</p>
-          </div>
-        ))}
-      </div>
+      {/* Detalhes expandidos */}
+      {expanded && (
+        <div className="border-t border-gray-100 px-4 py-4 pl-11 bg-gray-50/60">
 
-      {/* Histórico de Estudos — mesmos dados do Histórico */}
-      <div className="mt-5">
-        <button
-          type="button"
-          onClick={() => setShowHistory(h => !h)}
-          className="w-full flex items-center justify-between py-2 text-left group"
-        >
-          <h4 className="font-bold text-gray-900">
-            Histórico de Estudos{" "}
-            {pdfSessions.length > 0 && (
-              <span className="text-gray-400 font-normal text-sm">({pdfSessions.length})</span>
-            )}
-          </h4>
-          <span className="text-xs text-gray-400 group-hover:text-gray-700 transition-colors">
-            {showHistory ? "▲ Fechar" : "▼ Ver histórico"}
-          </span>
-        </button>
-
-        {showHistory && (
-          pdfSessions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-gray-300 bg-white p-4 text-sm text-gray-400 text-center mt-2">
-              Nenhum estudo registrado ainda.
+          {editing ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-3">✏️ Editar dados da aula</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">Título</label>
+                  <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-gray-900"/>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">Total de páginas</label>
+                  <input type="number" min="0" value={editTotalPages} onChange={e => setEditTotalPages(+e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-gray-900"/>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-gray-400 mb-1">Página lida até</label>
+                  <input type="number" min="0" value={editLastPage} onChange={e => setEditLastPage(+e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-gray-900"/>
+                </div>
+              </div>
+              <p className="text-[10px] text-gray-400 mb-3">
+                Tempo, questões, acertos e erros são calculados a partir das sessões no Histórico — edite-os por lá.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={savePdf} disabled={savingPdf}
+                  className="px-4 py-1.5 bg-gray-900 text-white rounded-lg text-xs font-bold disabled:opacity-50">
+                  {savingPdf ? "Salvando..." : "Salvar alterações"}
+                </button>
+                <button onClick={() => setEditing(false)} className="px-4 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs">
+                  Cancelar
+                </button>
+                <button onClick={deletePdf} className="px-4 py-1.5 bg-red-50 text-red-600 rounded-lg text-xs font-bold ml-auto">
+                  <Trash2 className="w-3 h-3 inline mr-1"/>Excluir aula
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="space-y-2 mt-2">
+            <div className="flex gap-2 mb-3">
+              <button onClick={() => { setEditing(true); setEditTitle(pdf.title); setEditTotalPages(pdf.totalPages); setEditLastPage(pdf.lastPageStudied); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
+                <Pencil className="w-3 h-3"/>Editar
+              </button>
+              <button
+                onClick={() => fetch(`/api/pdfs/${pdf.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ completed: !pdf.completed }) }).then(() => onReload())}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
+                <RotateCcw className="w-3 h-3"/>{pdf.completed ? "Desmarcar concluído" : "Marcar concluído"}
+              </button>
+            </div>
+          )}
+
+          {/* Histórico de Estudos */}
+          <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-2">
+            Histórico de estudos {pdfSessions.length > 0 && <span className="text-gray-400 font-normal">({pdfSessions.length})</span>}
+          </p>
+          {pdfSessions.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-3 border border-dashed border-gray-200 rounded-lg bg-white">
+              Nenhum estudo registrado ainda.
+            </p>
+          ) : (
+            <div className="space-y-1.5">
               {pdfSessions.map(s => {
                 const sAcc = accuracy(s.correct, s.questions);
                 return (
-                  <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <p className="text-xs font-bold text-gray-700">{fmtDate(s.createdAt)}</p>
-                          {s.category && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
-                              {s.category}
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
-                          <div>
-                            <p className="text-xs text-gray-500">Horas</p>
-                            <p className="font-bold text-sm">{s.hoursFormatted}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Questões</p>
-                            <p className="font-bold text-sm">{s.questions}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Acertos</p>
-                            <p className="font-bold text-sm text-green-600">{s.correct}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Erros</p>
-                            <p className="font-bold text-sm text-red-600">{s.wrong}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Acurácia</p>
-                            <p className={`font-bold text-sm ${sAcc >= 70 ? "text-green-600" : sAcc >= 50 ? "text-yellow-600" : sAcc > 0 ? "text-red-600" : "text-gray-400"}`}>
-                              {s.questions > 0 ? `${sAcc}%` : "—"}
-                            </p>
-                          </div>
-                        </div>
-                        {s.comment && (
-                          <p className="mt-2 text-xs text-gray-500 italic">💬 {s.comment}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => deleteSession(s.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors shrink-0">
-                        <Trash2 className="w-3.5 h-3.5"/>
-                      </button>
-                    </div>
+                  <div key={s.id} className="flex items-center gap-3 text-xs bg-white rounded-lg px-3 py-2 border border-gray-100">
+                    <span className="text-gray-500 w-14 shrink-0">{fmtDate(s.createdAt)}</span>
+                    {s.category && <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] shrink-0">{s.category}</span>}
+                    <span className="flex-1 text-gray-400 truncate">{s.comment || ""}</span>
+                    <span className="text-gray-500 shrink-0">{s.hoursFormatted}</span>
+                    <span className="text-green-600 font-medium shrink-0 w-8 text-right">{s.correct > 0 ? `${s.correct}✓` : ""}</span>
+                    <span className="text-red-500 font-medium shrink-0 w-8 text-right">{s.wrong > 0 ? `${s.wrong}✗` : ""}</span>
+                    <span className={`font-bold shrink-0 w-10 text-right ${sAcc >= 70 ? "text-green-600" : sAcc >= 50 ? "text-yellow-600" : sAcc > 0 ? "text-red-600" : "text-gray-300"}`}>
+                      {s.questions > 0 ? `${sAcc}%` : "—"}
+                    </span>
                   </div>
                 );
               })}
             </div>
-          )
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
 
 // ── Página principal ──────────────────────────────────────────────────────────
 export default function MateriasPage() {
@@ -568,21 +531,35 @@ export default function MateriasPage() {
                         </form>
 
                         {/* PDFs */}
-                        <div className="space-y-4">
+                        <div>
                           {t.pdfs.length === 0 ? (
                             <div className="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-400 text-center">
                               Nenhum PDF cadastrado neste tópico.
                             </div>
                           ) : (
-                            t.pdfs.map(p => (
-                              <PdfCard
-                                key={p.id}
-                                pdf={p}
-                                subjectId={s.id}
-                                onReload={load}
-                                allSessions={allSessions}
-                              />
-                            ))
+                            <div className="space-y-2">
+                              {/* Cabeçalho das colunas */}
+                              <div className="flex items-center gap-2.5 px-4 text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                                <span className="shrink-0 w-[18px]"></span>
+                                <span style={{ minWidth: 100, maxWidth: 140 }}>Aula</span>
+                                <span className="flex-1 min-w-[110px]">Progresso</span>
+                                <span className="w-12 text-right shrink-0">Tempo</span>
+                                <span className="w-9 text-right shrink-0">Quest.</span>
+                                <span className="w-9 text-right shrink-0">Acert.</span>
+                                <span className="w-9 text-right shrink-0">Erros</span>
+                                <span className="w-10 text-right shrink-0">Acur.</span>
+                                <span className="shrink-0 w-6"></span>
+                              </div>
+                              {t.pdfs.map(p => (
+                                <PdfRow
+                                  key={p.id}
+                                  pdf={p}
+                                  subjectId={s.id}
+                                  onReload={load}
+                                  allSessions={allSessions}
+                                />
+                              ))}
+                            </div>
                           )}
                         </div>
                       </div>
