@@ -233,6 +233,8 @@ export default function MateriasPage() {
   const [topicSubjectId, setTopicSubjectId] = useState("");
   const [pdfTitle, setPdfTitle]   = useState("");
   const [pdfTopicId, setPdfTopicId] = useState("");
+  const [openAddPdf, setOpenAddPdf] = useState<Record<string, boolean>>({});
+  const [openAddTopic, setOpenAddTopic] = useState<Record<string, boolean>>({});
   const [pdfPages, setPdfPages]   = useState("0");
   const [saving, setSaving]       = useState(false);
   const [error, setError]         = useState("");
@@ -471,18 +473,30 @@ export default function MateriasPage() {
                       </div>
                     )}
 
-                    {/* Novo tópico */}
-                    <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); }} className="flex gap-2">
-                      <input
-                        value={topicSubjectId === s.id ? topicName : ""}
-                        onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }}
-                        placeholder="Novo tópico" required
-                        className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                      <button type="submit" disabled={saving}
-                        className="px-4 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                        + Tópico
+                    {/* Novo tópico — escondido atrás de um botão */}
+                    {openAddTopic[s.id] ? (
+                      <form onSubmit={e => { setTopicSubjectId(s.id); addTopic(e); setOpenAddTopic(p => ({ ...p, [s.id]: false })); }} className="flex gap-2">
+                        <input
+                          autoFocus
+                          value={topicSubjectId === s.id ? topicName : ""}
+                          onChange={e => { setTopicSubjectId(s.id); setTopicName(e.target.value); }}
+                          placeholder="Novo tópico" required
+                          className="flex-1 border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                        <button type="submit" disabled={saving}
+                          className="px-4 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                          + Tópico
+                        </button>
+                        <button type="button" onClick={() => setOpenAddTopic(p => ({ ...p, [s.id]: false }))}
+                          className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm">
+                          Cancelar
+                        </button>
+                      </form>
+                    ) : (
+                      <button type="button" onClick={() => setOpenAddTopic(p => ({ ...p, [s.id]: true }))}
+                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
+                        <Plus className="w-3.5 h-3.5"/>Adicionar tópico
                       </button>
-                    </form>
+                    )}
 
                     {s.topics.map(t => (
                       <div key={t.id} className="bg-white rounded-2xl border border-gray-200 p-5">
@@ -506,29 +520,41 @@ export default function MateriasPage() {
                           )}
                         </div>
 
-                        {/* Adicionar PDF */}
-                        <form onSubmit={addPdf} className="flex gap-2 flex-wrap items-end mb-4">
-                          <div className="flex-1">
-                            <input
-                              value={pdfTopicId === t.id ? pdfTitle : ""}
-                              onChange={e => { setPdfTopicId(t.id); setPdfTitle(e.target.value); }}
-                              onClick={() => setPdfTopicId(t.id)}
-                              placeholder="Ex: Aula 00" required
-                              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Qtde Páginas</label>
-                            <input type="number" min="0"
-                              value={pdfTopicId === t.id ? pdfPages : "0"}
-                              onChange={e => { setPdfTopicId(t.id); setPdfPages(e.target.value); }}
-                              onClick={() => setPdfTopicId(t.id)}
-                              className="w-28 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
-                          </div>
-                          <button type="submit" disabled={saving || pdfTopicId !== t.id}
-                            className="px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
-                            + PDF
+                        {/* Adicionar PDF — escondido atrás de um botão */}
+                        {openAddPdf[t.id] ? (
+                          <form onSubmit={e => { addPdf(e); setOpenAddPdf(p => ({ ...p, [t.id]: false })); }} className="flex gap-2 flex-wrap items-end mb-4">
+                            <div className="flex-1">
+                              <input
+                                autoFocus
+                                value={pdfTopicId === t.id ? pdfTitle : ""}
+                                onChange={e => { setPdfTopicId(t.id); setPdfTitle(e.target.value); }}
+                                onClick={() => setPdfTopicId(t.id)}
+                                placeholder="Ex: Aula 00" required
+                                className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Qtde Páginas</label>
+                              <input type="number" min="0"
+                                value={pdfTopicId === t.id ? pdfPages : "0"}
+                                onChange={e => { setPdfTopicId(t.id); setPdfPages(e.target.value); }}
+                                onClick={() => setPdfTopicId(t.id)}
+                                className="w-28 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"/>
+                            </div>
+                            <button type="submit" disabled={saving || pdfTopicId !== t.id}
+                              className="px-4 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">
+                              + PDF
+                            </button>
+                            <button type="button" onClick={() => setOpenAddPdf(p => ({ ...p, [t.id]: false }))}
+                              className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-xl text-sm">
+                              Cancelar
+                            </button>
+                          </form>
+                        ) : (
+                          <button type="button" onClick={() => setOpenAddPdf(p => ({ ...p, [t.id]: true }))}
+                            className="flex items-center gap-1.5 px-3 py-2 mb-4 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-dashed border-gray-300">
+                            <Plus className="w-3.5 h-3.5"/>Adicionar aula/PDF
                           </button>
-                        </form>
+                        )}
 
                         {/* PDFs */}
                         <div>
