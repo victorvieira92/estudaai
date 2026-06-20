@@ -25,31 +25,22 @@ interface TopicData {
   topics: TopicCompare[];
 }
 
-// ── Gauge SVG (semicírculo duplo) ─────────────────────────────────────────────
-function GaugeArc({ you, others }: { you: number; others: number }) {
-  const r1 = 26, r2 = 17;
-  const cx = 32, cy = 30;
-
-  function arcPath(radius: number, pctRaw: number) {
-    const pct = Math.min(Math.max(pctRaw, 0), 100);
-    if (pct <= 0) return "";
-    const startAngle = Math.PI;
-    const endAngle   = Math.PI - (Math.PI * pct) / 100;
-    const x1 = cx + radius * Math.cos(startAngle);
-    const y1 = cy - radius * Math.sin(startAngle);
-    const x2 = cx + radius * Math.cos(endAngle);
-    const y2 = cy - radius * Math.sin(endAngle);
-    const largeArc = pct > 50 ? 1 : 0;
-    return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
-  }
-
+// ── Barra de comparação dupla ─────────────────────────────────────────────────
+function ComparisonBar({ you, others }: { you: number; others: number }) {
+  const max = Math.max(you, others, 1);
   return (
-    <svg width="64" height="38" viewBox="0 0 64 38">
-      <path d={arcPath(r1, 100)} stroke="#e5e7eb" strokeWidth="7" fill="none" strokeLinecap="round" />
-      <path d={arcPath(r1, others)} stroke={OTHERS_COLOR} strokeWidth="7" fill="none" strokeLinecap="round" />
-      <path d={arcPath(r2, 100)} stroke="#eef2f7" strokeWidth="7" fill="none" strokeLinecap="round" />
-      <path d={arcPath(r2, you)} stroke={YOU_COLOR} strokeWidth="7" fill="none" strokeLinecap="round" />
-    </svg>
+    <div style={{ width: 130 }} className="shrink-0">
+      <div className="flex items-center gap-2 mb-1">
+        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${(you / max) * 100}%`, backgroundColor: YOU_COLOR }} />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${(others / max) * 100}%`, backgroundColor: OTHERS_COLOR }} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -102,7 +93,7 @@ function TopicModal({ subjectName, onClose }: { subjectName: string; onClose: ()
               {data.topics.map((t, i) => (
                 <div key={t.name} className={`flex items-center gap-4 px-4 py-3 ${i < data.topics.length - 1 ? "border-b border-gray-100" : ""}`}>
                   <div className="shrink-0">
-                    <GaugeArc you={t.you.accuracy ?? 0} others={t.others.accuracy ?? 0} />
+                    <ComparisonBar you={t.you.accuracy ?? 0} others={t.others.accuracy ?? 0} />
                   </div>
                   <p className="text-sm font-medium text-gray-800 flex-1 min-w-0 truncate">{t.name}</p>
                   <div className="text-right shrink-0 min-w-[90px]">
@@ -186,7 +177,7 @@ export default function ComparativoPage() {
                 onClick={() => setModalSubject(s.name)}
                 className={`w-full flex items-center gap-4 px-5 py-3 hover:bg-gray-50 transition-colors text-left ${i < data.subjects.length - 1 ? "border-b border-gray-100" : ""}`}>
                 <div className="shrink-0">
-                  <GaugeArc you={youAcc ?? 0} others={othersAcc ?? 0} />
+                  <ComparisonBar you={youAcc ?? 0} others={othersAcc ?? 0} />
                 </div>
                 <p className="text-sm font-semibold text-gray-800 flex-1 min-w-0 truncate">{s.name}</p>
                 <span className="text-xs font-semibold shrink-0 min-w-[90px] text-right" style={{ color: YOU_COLOR }}>
