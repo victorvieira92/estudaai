@@ -30,15 +30,17 @@ function GaugeArc({ you, others }: { you: number; others: number }) {
   const r1 = 26, r2 = 17;
   const cx = 32, cy = 30;
 
-  function arcPath(radius: number, pct: number) {
+  function arcPath(radius: number, pctRaw: number) {
+    const pct = Math.min(Math.max(pctRaw, 0), 100);
+    if (pct <= 0) return "";
     const startAngle = Math.PI;
-    const endAngle   = Math.PI - (Math.PI * Math.min(Math.max(pct, 0), 100)) / 100;
+    const endAngle   = Math.PI - (Math.PI * pct) / 100;
     const x1 = cx + radius * Math.cos(startAngle);
-    const y1 = cy + radius * Math.sin(startAngle);
+    const y1 = cy - radius * Math.sin(startAngle);
     const x2 = cx + radius * Math.cos(endAngle);
-    const y2 = cy + radius * Math.sin(endAngle);
+    const y2 = cy - radius * Math.sin(endAngle);
     const largeArc = pct > 50 ? 1 : 0;
-    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
+    return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`;
   }
 
   return (
@@ -126,7 +128,7 @@ function TopicModal({ subjectName, onClose }: { subjectName: string; onClose: ()
 }
 
 // ── Página principal ──────────────────────────────────────────────────────────
-export default function CompeticaoPage() {
+export default function ComparativoPage() {
   const [data, setData] = useState<CompeticaoData | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalSubject, setModalSubject] = useState<string | null>(null);
@@ -139,7 +141,7 @@ export default function CompeticaoPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         <div className="text-white px-8" style={{ backgroundColor: BG, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-          <h1 className="text-3xl font-bold">Competição</h1>
+          <h1 className="text-3xl font-bold">Comparativo</h1>
           <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.6)" }}>Compare seu desempenho com outros usuários</p>
         </div>
         <div className="max-w-3xl mx-auto px-6 py-16 text-center">
@@ -153,7 +155,7 @@ export default function CompeticaoPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="text-white px-8" style={{ backgroundColor: BG, minHeight: 124, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-        <h1 className="text-3xl font-bold">Competição</h1>
+        <h1 className="text-3xl font-bold">Comparativo</h1>
         <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.6)" }}>Compare seu desempenho com outros usuários</p>
       </div>
 

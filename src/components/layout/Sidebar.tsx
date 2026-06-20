@@ -12,7 +12,7 @@ import {
 
 const nav = [
   { href: "/dashboard",        label: "Painel",            icon: LayoutDashboard },
-  { href: "/competicao",       label: "Competição",        icon: Trophy },
+  { href: "/comparativo",      label: "Comparativo",       icon: Trophy },
   { href: "/historico",        label: "Histórico",         icon: History },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
