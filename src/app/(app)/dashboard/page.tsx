@@ -562,7 +562,7 @@ export default function PainelPage() {
           {[
             { label: "Tempo de Estudo",    value: stats ? fmtH(stats.totalHours) : "—",     color: "text-gray-900", sub: undefined },
             { label: "Desempenho",         value: stats?.accuracy !== null && stats?.accuracy !== undefined ? `${stats.accuracy}%` : "—",
-              sub: stats && stats.totalQuestions > 0 ? `${stats.totalCorrect} Acertos · ${stats.totalWrong} Erros` : "sem dados",
+              sub: stats && stats.totalQuestions > 0 ? `${stats.totalQuestions} Exercícios · ${stats.totalCorrect} Acertos · ${stats.totalWrong} Erros` : "sem dados",
               color: stats?.accuracy !== null && stats?.accuracy !== undefined ? stats.accuracy >= 70 ? "text-green-600" : stats.accuracy >= 50 ? "text-yellow-600" : "text-red-600" : "text-gray-400" },
             { label: "Progresso no Edital", value: stats && stats.totalPdfs > 0 ? `${Math.round((stats.completedPdfs / stats.totalPdfs) * 100)}%` : "—",
               sub: stats ? `${stats.completedPdfs} concluídos · ${stats.totalPdfs - stats.completedPdfs} pendentes` : "", color: "text-gray-900" },

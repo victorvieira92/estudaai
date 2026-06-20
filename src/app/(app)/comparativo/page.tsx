@@ -3,8 +3,8 @@ import React, { useEffect, useState } from "react";
 import { ChevronRight, X, Trophy } from "lucide-react";
 
 const BG = "#1B4040";
-const YOU_COLOR    = "#378ADD";
-const OTHERS_COLOR = "#D85A30";
+const YOU_COLOR    = "#C9A227"; // dourado do brasão EstudaAí
+const OTHERS_COLOR = "#1B4040"; // verde institucional do site
 
 interface SubjectCompare {
   name: string;
