@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 
 // GET /api/competicao/topicos?subjectName=xxx
 // Compara o usuário logado com o agregado de todos os outros usuários, por tópico, dentro de uma matéria.
+// Fonte de verdade: StudySession (igual Histórico/Matérias), não os campos agregados em Pdf,
+// que podem ficar desatualizados quando o lançamento não passa pelo fluxo de PDF específico.
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ message: "Não autorizado." }, { status: 401 });
@@ -19,35 +21,39 @@ export async function GET(req: Request) {
 
   const allUsers = await prisma.user.findMany({ select: { id: true } });
 
-  const allSubjectsByUser = await Promise.all(
-    allUsers.map(u =>
-      prisma.subject.findMany({
-        where:   { userId: u.id },
-        include: { topics: { include: { pdfs: true } } },
-      }).then(subs => ({ userId: u.id, subject: subs.find(s => norm(s.name) === targetName) ?? null }))
-    )
-  );
-
-  function aggregateByTopic(subject: typeof allSubjectsByUser[0]["subject"]) {
+  // Agrega questões/acertos/horas por tópico a partir das StudySessions reais
+  // (não usa os campos agregados em Pdf, que podem ficar desatualizados).
+  async function aggregateByTopicReal(userId: string, subjectId: string | null) {
     const out: Record<string, { questions: number; correct: number; hours: number; name: string }> = {};
-    if (!subject) return out;
-    for (const topic of subject.topics) {
-      const questions = topic.pdfs.reduce((a, p) => a + p.questions, 0);
-      const correct   = topic.pdfs.reduce((a, p) => a + p.correctQuestions, 0);
-      const hours     = topic.pdfs.reduce((a, p) => a + p.studyHours, 0);
-      out[norm(topic.name)] = { questions, correct, hours, name: topic.name };
+    if (!subjectId) return out;
+    const sessions = await prisma.studySession.findMany({
+      where: { userId, subjectId },
+    });
+    for (const s of sessions) {
+      let n: any = {};
+      try { n = JSON.parse(s.notes ?? "{}"); } catch {}
+      const topicNameRaw = (n.topicName ?? "").trim();
+      if (!topicNameRaw) continue;
+      const key = norm(topicNameRaw);
+      if (!out[key]) out[key] = { questions: 0, correct: 0, hours: 0, name: topicNameRaw };
+      out[key].questions += s.questions;
+      out[key].correct   += s.correct;
+      out[key].hours     += s.studyHours;
     }
     return out;
   }
 
-  const myEntry  = allSubjectsByUser.find(e => e.userId === myId);
-  const myTopics = aggregateByTopic(myEntry?.subject ?? null);
+  const mySubjects = await prisma.subject.findMany({ where: { userId: myId }, select: { id: true, name: true } });
+  const mySubject  = mySubjects.find(s => norm(s.name) === targetName) ?? null;
+  const myTopics   = await aggregateByTopicReal(myId, mySubject?.id ?? null);
 
-  // Soma os tópicos de todos os outros usuários
   const othersTopics: Record<string, { questions: number; correct: number; hours: number; name: string }> = {};
-  for (const entry of allSubjectsByUser) {
-    if (entry.userId === myId) continue;
-    const agg = aggregateByTopic(entry.subject);
+  for (const u of allUsers) {
+    if (u.id === myId) continue;
+    const subjects = await prisma.subject.findMany({ where: { userId: u.id }, select: { id: true, name: true } });
+    const subject  = subjects.find(s => norm(s.name) === targetName) ?? null;
+    if (!subject) continue;
+    const agg = await aggregateByTopicReal(u.id, subject.id);
     for (const [key, val] of Object.entries(agg)) {
       if (!othersTopics[key]) othersTopics[key] = { questions: 0, correct: 0, hours: 0, name: val.name };
       othersTopics[key].questions += val.questions;
@@ -69,7 +75,7 @@ export async function GET(req: Request) {
   }).sort((a, b) => (b.you.questions + b.others.questions) - (a.you.questions + a.others.questions));
 
   return NextResponse.json({
-    subjectName: myEntry?.subject?.name ?? subjectName,
+    subjectName: mySubject?.name ?? subjectName,
     topics,
   });
 }
