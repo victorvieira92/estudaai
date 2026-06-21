@@ -242,7 +242,7 @@ export async function GET() {
   );
 
   return NextResponse.json({
-    totalHours:     parseFloat(totalHours.toFixed(1)),
+    totalHours:     totalHours,
     totalQuestions, totalCorrect, totalWrong,
     accuracy:       totalQuestions > 0
       ? parseFloat(((totalCorrect / totalQuestions) * 100).toFixed(1))

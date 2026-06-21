@@ -558,22 +558,24 @@ export default function PainelPage() {
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-6">
 
         {/* ── KPIs topo ── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: "Tempo de Estudo",    value: stats ? fmtH(stats.totalHours) : "—",     color: "text-gray-900", sub: undefined },
-            { label: "Desempenho",         value: stats?.accuracy !== null && stats?.accuracy !== undefined ? `${stats.accuracy}%` : "—",
-              sub: stats && stats.totalQuestions > 0 ? `${stats.totalQuestions} Exercícios · ${stats.totalCorrect} Acertos · ${stats.totalWrong} Erros` : "sem dados",
+            { label: "Tempo de Estudo",     value: stats ? fmtH(stats.totalHours) : "—", sub: undefined, color: "text-gray-900" },
+            { label: "Desempenho",          value: stats?.accuracy !== null && stats?.accuracy !== undefined ? `${stats.accuracy}%` : "—",
+              sub: undefined,
               color: stats?.accuracy !== null && stats?.accuracy !== undefined ? stats.accuracy >= 70 ? "text-green-600" : stats.accuracy >= 50 ? "text-yellow-600" : "text-red-600" : "text-gray-400" },
+            { label: "Exercícios",          value: stats ? String(stats.totalQuestions) : "—",
+              sub: stats && stats.totalQuestions > 0 ? `${stats.totalCorrect}✓ · ${stats.totalWrong}✗` : "sem dados", color: "text-gray-900" },
             { label: "Progresso no Edital", value: stats && stats.totalPdfs > 0 ? `${Math.round((stats.completedPdfs / stats.totalPdfs) * 100)}%` : "—",
-              sub: stats ? `${stats.completedPdfs} concluídos · ${stats.totalPdfs - stats.completedPdfs} pendentes` : "", color: "text-gray-900" },
-            { label: "Revisões Pendentes", value: String(stats?.pendingReviews ?? "—"),
+              sub: undefined, color: "text-gray-900" },
+            { label: "Revisões Pendentes",  value: String(stats?.pendingReviews ?? "—"),
               sub: stats?.lateReviews ? `${stats.lateReviews} atrasadas` : "em dia",
               color: (stats?.lateReviews ?? 0) > 0 ? "text-red-600" : "text-gray-900" },
           ].map(({ label, value, sub, color }) => (
-            <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">{label}</p>
-              {sub && <p className="text-xs text-gray-500 mb-1">{sub}</p>}
-              <p className={`text-3xl font-bold ${color}`}>{value}</p>
+            <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">{label}</p>
+              <p className={`text-2xl font-bold ${color}`}>{value}</p>
+              {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
             </div>
           ))}
         </div>
