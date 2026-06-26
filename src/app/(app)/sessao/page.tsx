@@ -33,7 +33,7 @@ const labelCls  = "block text-[11px] font-bold text-gray-500 uppercase tracking-
 const inputCls  = "w-full border-b-2 outline-none text-center font-semibold bg-transparent transition-colors focus:border-teal-500";
 const selectBox = "w-full appearance-none border-b-2 border-teal-400 bg-transparent py-2 px-0 text-sm text-gray-800 focus:outline-none focus:border-teal-600 pr-6";
 
-const FRASES = ["Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.", "O tempo de estudo nunca é um tempo perdido.", "Esse esforço todo vai sim valer a pena.", "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.", "Seja forte e corajoso! Não se apavore, nem desanime, pois o Senhor, o seu Deus, estará com você por onde você andar", "A melhor forma de prever o futuro é criá-lo.", "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.", "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.", "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!", "Só o Papiro Liberta!", "Comece de onde você está. Use o que você tiver. Faça o que você puder.", "Para grandes resultados não existem atalhos.", "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.", "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.", "Um gênio é 10% inspiração e 90% transpiração.", "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.", "Busque sempre o progresso, não a perfeição.", "Tudo é possível se você se dedicar de cabeça e coração.", "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.", "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.", "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.", "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não."];
+const FRASES = ["Nossa maior fraqueza é desistir. O caminho mais certo para o sucesso é sempre tentar apenas uma vez mais.", "O tempo de estudo nunca é um tempo perdido.", "Esse esforço todo vai sim valer a pena.", "O sucesso não cai do céu. Ele exige muita luta, esforço, estudo e força de vontade.", "A melhor forma de prever o futuro é criá-lo.", "Aprenda com o ontem. Viva o hoje. Tenha esperança para o amanhã.", "Sucesso é o acúmulo de pequenos esforços, repetidos dia e noite.", "Os estudos vão fortalecer a sua mente. Seja perseverante e confie!", "Só o Papiro Liberta!", "Comece de onde você está. Use o que você tiver. Faça o que você puder.", "Para grandes resultados não existem atalhos.", "Conquistas grandiosas levam tempo. Elas são fruto de muito esforço, tempo investido e disciplina.", "Não deseje que as coisas sejam mais fáceis; deseje que você seja melhor.", "Um gênio é 10% inspiração e 90% transpiração.", "Motivação é aquilo que te faz começar. Hábito é o que te faz continuar.", "Busque sempre o progresso, não a perfeição.", "Tudo é possível se você se dedicar de cabeça e coração.", "O futuro pertence àqueles que acreditam na beleza dos seus sonhos.", "Educação é o passaporte para o futuro, porque o amanhã pertence àqueles que se preparam para ele hoje.", "Você é mais corajoso do que acredita, mais forte do que parece e mais inteligente do que pensa.", "Se você não for atrás do que deseja, nunca o terá. Se você não perguntar, a resposta será sempre não."];
 
 function SessaoContent() {
   const searchParams = useSearchParams();
@@ -54,14 +54,15 @@ function SessaoContent() {
   const [newReview,      setNewReview]      = useState("");
 
   // Questões
-  const [correct,    setCorrect]    = useState("0");
-  const [wrong,      setWrong]      = useState("0");
+  const [correct,    setCorrect]    = useState("");
+  const [wrong,      setWrong]      = useState("");
   const [qInicial,   setQInicial]   = useState("");
   const [qFinal,     setQFinal]     = useState("");
   const [qErros,     setQErros]     = useState("");
+  const [qAnuladas,  setQAnuladas]  = useState("");
 
   // Páginas (múltiplas)
-  const [pages, setPages] = useState<PageRange[]>([{ id: uid(), start: "0", end: "0" }]);
+  const [pages, setPages] = useState<PageRange[]>([{ id: uid(), start: "", end: "" }]);
 
   // Videoaulas (múltiplas)
   const [videos, setVideos] = useState<VideoAula[]>([{ id: uid(), title: "Vídeo 01", start: "00:00:00", end: "00:00:00" }]);
@@ -422,12 +423,14 @@ function SessaoContent() {
                 <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Acertos / Erros</p>
                 <div className="flex gap-3">
                   <input type="number" min="0" value={correct} onChange={e => setCorrect(e.target.value)}
+                    placeholder="0"
                     className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
                   <input type="number" min="0" value={wrong} onChange={e => setWrong(e.target.value)}
+                    placeholder="0"
                     className={`${inputCls} text-gray-800 border-gray-200 text-xl w-1/2 py-1`} />
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
-                  <div className="grid grid-cols-3 gap-1.5 mb-2">
+                  <div className="grid grid-cols-2 gap-1.5 mb-1">
                     <div>
                       <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Inicial</p>
                       <input type="number" min="0" placeholder="1" value={qInicial} onChange={e => setQInicial(e.target.value)}
@@ -438,19 +441,27 @@ function SessaoContent() {
                       <input type="number" min="0" placeholder="39" value={qFinal} onChange={e => setQFinal(e.target.value)}
                         className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 mb-2">
                     <div>
                       <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Erros</p>
-                      <input type="number" min="0" placeholder="5" value={qErros} onChange={e => setQErros(e.target.value)}
+                      <input type="number" min="0" placeholder="0" value={qErros} onChange={e => setQErros(e.target.value)}
+                        className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-gray-400 uppercase tracking-widest mb-1">Anuladas</p>
+                      <input type="number" min="0" placeholder="0" value={qAnuladas} onChange={e => setQAnuladas(e.target.value)}
                         className={`${inputCls} text-gray-700 border-gray-200 text-sm w-full py-0.5`} />
                     </div>
                   </div>
                   <button type="button"
                     onClick={() => {
-                      const i = parseInt(qInicial) || 0;
-                      const f = parseInt(qFinal)   || 0;
-                      const e = parseInt(qErros)   || 0;
+                      const i = parseInt(qInicial)   || 0;
+                      const f = parseInt(qFinal)     || 0;
+                      const e = parseInt(qErros)     || 0;
+                      const a = parseInt(qAnuladas)  || 0;
                       if (f >= i && i > 0) {
-                        const total = f - i + 1;
+                        const total = f - i + 1 - a; // anuladas não entram na contagem
                         setCorrect(String(Math.max(0, total - e)));
                         setWrong(String(e));
                       }
@@ -471,8 +482,10 @@ function SessaoContent() {
                   {pages.map((p, i) => (
                     <div key={p.id} className="flex items-center gap-2">
                       <input type="number" min="0" value={p.start} onChange={e => updatePage(p.id, "start", e.target.value)}
+                        placeholder="0"
                         className={`${inputCls} text-gray-800 border-gray-200 text-lg w-1/2 py-0.5`} />
                       <input type="number" min="0" value={p.end} onChange={e => updatePage(p.id, "end", e.target.value)}
+                        placeholder="0"
                         className={`${inputCls} text-gray-800 border-gray-200 text-lg w-1/2 py-0.5`} />
                       {pages.length > 1 && (
                         <button onClick={() => removePage(p.id)} className="text-gray-300 hover:text-red-400 transition-colors">
