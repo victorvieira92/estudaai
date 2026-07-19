@@ -3,11 +3,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useEffect, useState } from "react";
 import {
-  LayoutDashboard, Sun, BookOpen, RefreshCw, FileText,
-  BarChart2, CalendarDays, LogOut, Target, UserCircle,
+  LayoutDashboard, BookOpen, RefreshCw, FileText,
+  CalendarDays, LogOut, Target, UserCircle,
   FolderOpen, TrendingUp, MessageSquare, ExternalLink,
   Cloud, GraduationCap, BookMarked, History, ScrollText, Trophy,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 const nav = [
@@ -16,7 +18,7 @@ const nav = [
   { href: "/historico",        label: "Histórico",         icon: History },
   { href: "/sessao",           label: "Sessao de Estudo",  icon: BookOpen },
   { href: "/edital",           label: "Edital",            icon: ScrollText },
-  { href: "/meu-edital",        label: "Meu Edital",        icon: ScrollText },
+  { href: "/meu-edital",       label: "Meu Edital",        icon: ScrollText },
   { href: "/calendario-ciclo", label: "Calendário",        icon: CalendarDays },
   { href: "/prioridades",      label: "Prioridades",       icon: TrendingUp },
   { href: "/materias",         label: "Materias",          icon: Target },
@@ -27,11 +29,11 @@ const nav = [
 ];
 
 const externalLinks = [
-  { href: "https://ankiweb.net/decks",                                   label: "Anki",       icon: ExternalLink  },
-  { href: "https://studychat-production-9f95.up.railway.app/",           label: "StudyChat",  icon: MessageSquare },
-  { href: "https://www.estrategiaconcursos.com.br/app/dashboard/cursos", label: "Estratégia", icon: GraduationCap },
-  { href: "https://onedrive.live.com/",                                  label: "OneDrive",   icon: Cloud         },
-  { href: "https://notebooklm.google.com/notebook",                      label: "NotebookLM", icon: BookMarked    },
+  { href: "https://ankiweb.net/decks",                                       label: "Anki",       icon: ExternalLink  },
+  { href: "https://studychat-production-9f95.up.railway.app/",               label: "StudyChat",  icon: MessageSquare },
+  { href: "https://www.estrategiaconcursos.com.br/app/dashboard/cursos",     label: "Estratégia", icon: GraduationCap },
+  { href: "https://onedrive.live.com/",                                      label: "OneDrive",   icon: Cloud         },
+  { href: "https://notebooklm.google.com/notebook",                          label: "NotebookLM", icon: BookMarked    },
   { href: "https://www.qconcursos.com/questoes-de-concursos/questoes",       label: "QConcursos", icon: ExternalLink  },
 ];
 
@@ -43,39 +45,89 @@ const HOVER  = "rgba(255,255,255,0.08)";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sidebar_collapsed");
+      if (saved !== null) setCollapsed(saved === "true");
+    } catch {}
+  }, []);
+
+  const toggle = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem("sidebar_collapsed", String(next));
+        window.dispatchEvent(new Event("sidebar_toggle"));
+      } catch {}
+      return next;
+    });
+  };
+
+  const w = collapsed ? "60px" : "224px";
 
   return (
     <aside
-      className="fixed left-0 top-0 h-screen w-56 flex flex-col z-50"
-      style={{ backgroundColor: BG }}
+      className="fixed left-0 top-0 h-screen flex flex-col z-50 transition-all duration-300"
+      style={{ backgroundColor: BG, width: w, minWidth: w, maxWidth: w }}
     >
+      {/* Logo / toggle header */}
       <div
-        className="flex items-center justify-center px-4 shrink-0"
-        style={{ height: "124px", borderBottom: `1px solid ${BORDER}` }}
+        className="flex items-center shrink-0 relative"
+        style={{ height: "124px", borderBottom: `1px solid ${BORDER}`, padding: collapsed ? "0" : "0 12px" }}
       >
-        <Image
-          src="/logo-estudaai.png"
-          alt="EstudaAí"
-          width={148}
-          height={74}
-          className="object-contain"
-          style={{ maxHeight: "72px", width: "auto" }}
-          priority
-        />
+        {!collapsed && (
+          <Image
+            src="/logo-estudaai.png"
+            alt="EstudaAí"
+            width={148}
+            height={74}
+            className="object-contain mx-auto"
+            style={{ maxHeight: "72px", width: "auto" }}
+            priority
+          />
+        )}
+
+        {/* Botão de toggle */}
+        <button
+          onClick={toggle}
+          className="absolute flex items-center justify-center rounded-full transition-all"
+          style={{
+            width: 22, height: 22,
+            backgroundColor: "rgba(255,255,255,0.15)",
+            bottom: -11,
+            right: collapsed ? "50%" : 12,
+            transform: collapsed ? "translateX(50%)" : "none",
+            color: "#fff",
+            zIndex: 10,
+          }}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+        >
+          {collapsed
+            ? <ChevronRight className="w-3 h-3" />
+            : <ChevronLeft  className="w-3 h-3" />}
+        </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-3 space-y-0.5" style={{ padding: collapsed ? "12px 6px" : "12px 8px" }}>
         {nav.map(({ href, label, icon: Icon }) => {
           const active = pathname === href;
           return (
             <Link
               key={href}
               href={href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
+              title={collapsed ? label : undefined}
+              className="flex items-center rounded-lg transition-all"
               style={{
+                gap:             collapsed ? 0 : 12,
+                padding:         collapsed ? "10px 0" : "10px 12px",
+                justifyContent:  collapsed ? "center" : "flex-start",
                 backgroundColor: active ? ACTIVE : "transparent",
                 color:           active ? "#ffffff" : MUTED,
                 fontWeight:      active ? 600 : 400,
+                fontSize:        14,
               }}
               onMouseEnter={e => {
                 if (!active) {
@@ -91,12 +143,12 @@ export function Sidebar() {
               }}
             >
               <Icon className="w-4 h-4 shrink-0" />
-              {label}
+              {!collapsed && <span>{label}</span>}
             </Link>
           );
         })}
 
-        <div className="pt-2 pb-1">
+        <div className="py-2">
           <div style={{ borderTop: `1px solid ${BORDER}` }} />
         </div>
 
@@ -106,8 +158,15 @@ export function Sidebar() {
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
-            style={{ color: MUTED }}
+            title={collapsed ? label : undefined}
+            className="flex items-center rounded-lg transition-all"
+            style={{
+              gap:            collapsed ? 0 : 12,
+              padding:        collapsed ? "10px 0" : "10px 12px",
+              justifyContent: collapsed ? "center" : "flex-start",
+              color:          MUTED,
+              fontSize:       14,
+            }}
             onMouseEnter={e => {
               (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
               (e.currentTarget as HTMLElement).style.color = "#fff";
@@ -118,17 +177,29 @@ export function Sidebar() {
             }}
           >
             <Icon className="w-4 h-4 shrink-0" />
-            <span>{label}</span>
-            <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.2)" }}>↗</span>
+            {!collapsed && (
+              <>
+                <span className="flex-1">{label}</span>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>↗</span>
+              </>
+            )}
           </a>
         ))}
       </nav>
 
-      <div className="p-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+      {/* Sair */}
+      <div style={{ padding: "12px 6px", borderTop: `1px solid ${BORDER}` }}>
         <button
           onClick={() => signOut({ callbackUrl: "/login" })}
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-sm transition-all"
-          style={{ color: MUTED }}
+          title={collapsed ? "Sair" : undefined}
+          className="flex items-center rounded-lg transition-all w-full"
+          style={{
+            gap:            collapsed ? 0 : 12,
+            padding:        collapsed ? "10px 0" : "10px 12px",
+            justifyContent: collapsed ? "center" : "flex-start",
+            color:          MUTED,
+            fontSize:       14,
+          }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLElement).style.backgroundColor = HOVER;
             (e.currentTarget as HTMLElement).style.color = "#fff";
@@ -138,7 +209,8 @@ export function Sidebar() {
             (e.currentTarget as HTMLElement).style.color = MUTED;
           }}
         >
-          <LogOut className="w-4 h-4" /> Sair
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Sair</span>}
         </button>
       </div>
     </aside>
