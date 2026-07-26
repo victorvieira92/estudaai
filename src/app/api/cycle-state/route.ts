@@ -21,7 +21,8 @@ export async function GET() {
     }
   } catch { dayStates = {}; }
 
-  return NextResponse.json({ dayStates });
+  const currentDayIdx = state?.currentDayIdx ?? 0;
+  return NextResponse.json({ dayStates, currentDayIdx });
 }
 
 export async function POST(req: Request) {
@@ -30,14 +31,17 @@ export async function POST(req: Request) {
   const uid = session.user.id as string;
 
   const body = await req.json();
-  const { dayStates } = body;
+  const { dayStates, currentDayIdx } = body;
 
   const payload = JSON.stringify({ dayStates: dayStates ?? {} });
 
   await prisma.userCycleState.upsert({
     where:  { userId: uid },
-    create: { userId: uid, currentDayIdx: 0, pendingBlocks: payload, lastDate: "" },
-    update: { pendingBlocks: payload },
+    create: { userId: uid, currentDayIdx: currentDayIdx ?? 0, pendingBlocks: payload, lastDate: "" },
+    update: {
+      pendingBlocks: payload,
+      ...(currentDayIdx !== undefined && { currentDayIdx }),
+    },
   });
 
   return NextResponse.json({ ok: true });

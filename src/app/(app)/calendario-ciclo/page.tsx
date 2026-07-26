@@ -49,18 +49,15 @@ export default function CalendarioCicloPage() {
   const [loading,       setLoading]       = useState(true);
   const [saving,        setSaving]        = useState(false);
   const [showConfig,    setShowConfig]    = useState(false);
-  // Dia atual do ciclo: seg=0, ter=1, qua=2, qui=3, sex=4, sab=5, dom=6
-  const currentDayIdx = (() => {
-    const dow = new Date().toLocaleDateString("en-US", { timeZone: "America/Sao_Paulo", weekday: "short" });
-    const map: Record<string, number> = { Mon:0, Tue:1, Wed:2, Thu:3, Fri:4, Sat:5, Sun:6 };
-    return map[dow] ?? 0;
-  })();
+  const [currentDayIdx, setCurrentDayIdx] = useState(0);
+  const [advancingDay,  setAdvancingDay]  = useState(false);
 
   useEffect(() => {
     Promise.all([
       fetch("/api/subjects").then(r => r.json()).catch(() => []),
       fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
-    ]).then(([su, bl]) => {
+      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({})),
+    ]).then(([su, bl, cs]) => {
       const subjects: Subject[] = Array.isArray(su) ? su : su?.subjects ?? [];
       setSubjects(subjects);
       const mapped: StudyBlock[] = Array.isArray(bl) ? bl.map((b: any) => ({
@@ -72,8 +69,9 @@ export default function CalendarioCicloPage() {
       setDraftDayOrder(days);
       setDraftBlocks(mapped);
       if (mapped.length === 0) setShowConfig(true);
-      // Usa o índice do banco, com clamp para não ultrapassar o tamanho do ciclo
-      // currentDayIdx calculado pelo dia da semana — não precisa do banco
+      // Usa o currentDayIdx salvo no banco, com clamp para não ultrapassar o tamanho do ciclo
+      const savedIdx = typeof cs?.currentDayIdx === "number" ? cs.currentDayIdx : 0;
+      setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
     }).finally(() => setLoading(false));
   }, []);
 
@@ -170,6 +168,19 @@ export default function CalendarioCicloPage() {
         }).catch(console.error);
       }
     } finally { setSaving(false); }
+  };
+
+  // ── Avançar dia do ciclo ────────────────────────────────────────────────
+  const advanceDay = async () => {
+    setAdvancingDay(true);
+    const nextIdx = (currentDayIdx + 1) % cycleDays.length;
+    await fetch("/api/cycle-state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentDayIdx: nextIdx, dayStates: {} }),
+    }).catch(console.error);
+    setCurrentDayIdx(nextIdx);
+    setAdvancingDay(false);
   };
 
   if (loading) return (
@@ -356,6 +367,18 @@ export default function CalendarioCicloPage() {
                           <span className="text-xs text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: BG_HEADER }}>Atual</span>
                         )}
                       </div>
+                      {isCurrent && (
+                        <button
+                          onClick={advanceDay}
+                          disabled={advancingDay}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-colors disabled:opacity-50"
+                          style={{ backgroundColor: BG_HEADER }}
+                          title="Marcar dia como concluído e avançar para o próximo"
+                        >
+                          <Check className="w-3 h-3" />
+                          {advancingDay ? "..." : "Concluir dia"}
+                        </button>
+                      )}
                       <div className="flex items-center gap-1 text-xs text-gray-400">
                         <Clock className="w-3 h-3" /> {fmt(dayHours)}
                       </div>
