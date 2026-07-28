@@ -140,11 +140,16 @@ export async function GET() {
     if (s.subjectId) dateToSubjectSessions[ds].push(s.subjectId);
   });
 
-  // Meta diária de horas = total do ciclo dividido pelo número de dias
-  // Usada como referência para calcular done/partial/none por horas (igual ao Estudei/Gran)
-  const cycleUniquedays = new Set(studyBlocks.map((b: any) => b.dayOfWeek)).size;
-  const cycleTotalHours = (studyBlocks as any[]).reduce((a: number, b: any) => a + (b.hours ?? 0), 0);
-  const dailyGoalHours  = cycleUniquedays > 0 ? cycleTotalHours / cycleUniquedays : 3;
+  // Meta por dia da semana: soma das horas dos blocos daquele dayOfWeek
+  // dayOfWeek no banco: seg=0, ter=1, qua=2, qui=3, sex=4, sab=5, dom=6
+  const goalByDow: Record<number, number> = {};
+  for (const b of studyBlocks as any[]) {
+    const dow = b.dayOfWeek as number;
+    goalByDow[dow] = (goalByDow[dow] ?? 0) + (b.hours ?? 0);
+  }
+
+  // Converte dia da semana JS (0=dom,1=seg...6=sab) para índice do ciclo (seg=0...dom=6)
+  function jsDoWtoCycleIdx(dow: number): number { return dow === 0 ? 6 : dow - 1; }
 
   // Mapa data → horas estudadas naquele dia
   const dateToHours: Record<string, number> = {};
@@ -153,12 +158,18 @@ export async function GET() {
     dateToHours[ds] = (dateToHours[ds] ?? 0) + s.studyHours;
   });
 
-  // Calcula status de cada dia baseado em HORAS (não em matérias)
-  // Assim mudanças no ciclo não afetam dias passados
+  // Calcula status de cada dia baseado em HORAS vs meta do dia da semana
+  // Assim mudanças nas matérias do ciclo não afetam dias passados
   function getDayStatus(ds: string): "done" | "partial" | "none" {
     const hours = dateToHours[ds] ?? 0;
-    if (hours <= 0)               return "none";
-    if (hours >= dailyGoalHours)  return "done";
+    if (hours <= 0) return "none";
+    // Descobre o dia da semana da data para pegar a meta correta
+    const dow    = new Date(ds + "T12:00:00Z").getUTCDay();
+    const idx    = jsDoWtoCycleIdx(dow);
+    const goal   = goalByDow[idx] ?? 0;
+    // Se não há meta configurada para esse dia, qualquer estudo = done
+    if (goal <= 0) return "done";
+    if (hours >= goal * 0.9) return "done";    // margem de 10% (ex: 2h42 numa meta de 3h = done)
     return "partial";
   }
 

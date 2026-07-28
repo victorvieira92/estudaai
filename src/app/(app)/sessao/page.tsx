@@ -73,6 +73,8 @@ function SessaoContent() {
   const [error,           setError]           = useState("");
   const [showCelebration, setShowCelebration] = useState(false);
   const [motivPhrase,     setMotivPhrase]     = useState("");
+  const [cycleAdvanced,   setCycleAdvanced]   = useState(false);
+  const [advancingCycle,  setAdvancingCycle]  = useState(false);
 
   const subject  = subjects.find(s => s.id === subjectId);
   const topic    = subject?.topics.find(t => t.id === topicId);
@@ -251,6 +253,25 @@ function SessaoContent() {
     } catch (e: any) {
       setError(e.message);
     } finally { setSaving(false); }
+  };
+
+  // ── Avançar dia do ciclo ─────────────────────────────────────────────────
+  const advanceCycleDay = async () => {
+    setAdvancingCycle(true);
+    try {
+      const stateRes = await fetch("/api/cycle-state").then(r => r.json()).catch(() => ({}));
+      const currentDayIdx = typeof stateRes?.currentDayIdx === "number" ? stateRes.currentDayIdx : 0;
+      const blocksRes = await fetch("/api/study-blocks").then(r => r.json()).catch(() => []);
+      const totalDays = new Set(Array.isArray(blocksRes) ? blocksRes.map((b: any) => b.dayOfWeek) : []).size || 7;
+      const nextIdx = (currentDayIdx + 1) % totalDays;
+      await fetch("/api/cycle-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentDayIdx: nextIdx, dayStates: stateRes?.dayStates ?? {} }),
+      });
+      setCycleAdvanced(true);
+    } catch (e) { console.error(e); }
+    setAdvancingCycle(false);
   };
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -593,8 +614,21 @@ function SessaoContent() {
                 &ldquo;{motivPhrase}&rdquo;
               </p>
             </div>
+            {!cycleAdvanced ? (
+              <button
+                onClick={advanceCycleDay}
+                disabled={advancingCycle}
+                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors mb-3 disabled:opacity-60"
+                style={{ backgroundColor: "#C9A227" }}>
+                {advancingCycle ? "Avançando..." : "✅ Concluir dia e avançar ciclo"}
+              </button>
+            ) : (
+              <div className="w-full py-2 rounded-xl text-center text-sm font-semibold text-green-700 bg-green-50 border border-green-200 mb-3">
+                ✓ Ciclo avançado para o próximo dia!
+              </div>
+            )}
             <button
-              onClick={() => setShowCelebration(false)}
+              onClick={() => { setShowCelebration(false); setCycleAdvanced(false); }}
               className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-colors"
               style={{ backgroundColor: "#1B4040" }}>
               Continuar estudando 💪
