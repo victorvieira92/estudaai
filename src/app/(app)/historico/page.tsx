@@ -1,6 +1,7 @@
 "use client";
 // v2
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Clock, Pencil, Trash2, MessageSquare, X, Check, ChevronDown } from "lucide-react";
 
 interface Session {
@@ -248,7 +249,8 @@ export default function HistoricoPage() {
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
 
-  const [filterSubjectId, setFilterSubjectId] = useState<string>("all");
+  const searchParams      = useSearchParams();
+  const [filterSubjectId, setFilterSubjectId] = useState<string>(searchParams.get("subjectId") ?? "all");
   const [commentId,   setCommentId]   = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
   const [editId,      setEditId]      = useState<string | null>(null);

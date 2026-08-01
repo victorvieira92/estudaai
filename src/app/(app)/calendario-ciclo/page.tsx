@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   CalendarDays, Settings, Zap, Plus, Trash2,
@@ -42,6 +43,7 @@ function blocksToOrderedDays(blocks: StudyBlock[]): number[] {
 }
 
 export default function CalendarioCicloPage() {
+  const router = useRouter();
   const [subjects,      setSubjects]      = useState<Subject[]>([]);
   const [blocks,        setBlocks]        = useState<StudyBlock[]>([]);
   const [draftDayOrder, setDraftDayOrder] = useState<number[]>([]);
@@ -388,7 +390,12 @@ export default function CalendarioCicloPage() {
                         const color = block.subjectId ? subjectColorMap.get(block.subjectId) : null;
                         const label = block.subjectName ?? BLOCK_TYPES.find(t => t.value === block.blockType)?.label ?? block.blockType;
                         return (
-                          <div key={bi} className={`rounded-lg px-3 py-2 ${color?.bg ?? "bg-gray-50"} border ${color?.border ?? "border-gray-100"}`}>
+                          <div
+                            key={bi}
+                            onClick={() => block.subjectId && router.push(`/historico?subjectId=${block.subjectId}`)}
+                            className={`rounded-lg px-3 py-2 ${color?.bg ?? "bg-gray-50"} border ${color?.border ?? "border-gray-100"} ${block.subjectId ? "cursor-pointer hover:opacity-80 transition-opacity" : ""}`}
+                            title={block.subjectId ? `Ver histórico de ${label}` : undefined}
+                          >
                             <div className="flex items-center justify-between">
                               <p className={`text-xs font-semibold truncate ${color?.text ?? "text-gray-700"}`}>{label}</p>
                               <p className={`text-xs ml-2 shrink-0 ${color?.text ?? "text-gray-400"}`}>{fmt(block.hours)}</p>
