@@ -119,34 +119,31 @@ export default function HojePage() {
   const [completing,     setCompleting]     = useState(false);
 
   useEffect(() => {
-    fetch(`/api/schedule`)
-      .then(r => r.json())
-      .then(setData)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-
-    // Carrega blocos do ciclo
-    fetch("/api/study-blocks").then(r => r.json()).then((bl: any[]) => {
-      const mapped: CicloBlock[] = Array.isArray(bl) ? bl.map(b => ({
+    // Carrega tudo em sequência: primeiro o cycle-state do banco, depois os blocos e o schedule
+    Promise.all([
+      fetch("/api/cycle-state").then(r => r.json()).catch(() => ({ currentDayIdx: 0 })),
+      fetch("/api/study-blocks").then(r => r.json()).catch(() => []),
+      fetch("/api/schedule").then(r => r.json()).catch(() => null),
+    ]).then(([cs, bl, scheduleData]) => {
+      // 1. Blocos do ciclo
+      const mapped: CicloBlock[] = Array.isArray(bl) ? bl.map((b: any) => ({
         id: b.id, dayOfWeek: b.dayOfWeek, hours: b.hours,
         blockType: b.blockType, subjectId: b.subjectId ?? null, subjectName: b.subject?.name ?? null,
       })) : [];
       setCicloBlocks(mapped);
-      const days  = getCycleDays(mapped);
-      // Lê currentDayIdx do BANCO (fonte única de verdade, sincronizada com calendário e sessão)
-      fetch("/api/cycle-state").then(r => r.json()).then(cs => {
-        const savedIdx = typeof cs?.currentDayIdx === "number" ? cs.currentDayIdx : 0;
-        setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
-        // localStorage mantido só para pendingBlocks e doneIds (estado local da fila)
-        try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
-        try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
-      }).catch(() => {
-        const saved = parseInt(localStorage.getItem(getCycleKey(uid)) ?? "0", 10);
-        setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
-        try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
-        try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
-      });
-    }).catch(console.error);
+
+      // 2. currentDayIdx do banco — fonte única de verdade
+      const days     = getCycleDays(mapped);
+      const savedIdx = typeof cs?.currentDayIdx === "number" ? cs.currentDayIdx : 0;
+      setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
+
+      // 3. Estado local da fila (pendingBlocks e doneIds)
+      try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
+      try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
+
+      // 4. Dados do schedule
+      if (scheduleData) setData(scheduleData);
+    }).finally(() => setLoading(false));
   }, []);
 
   if (loading) return (
