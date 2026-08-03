@@ -31,10 +31,14 @@ export async function GET(req: Request) {
   const rangeStart = new Date(todayDS + "T00:00:00-03:00");
   const rangeEnd   = new Date(todayDS + "T23:59:59-03:00");
 
-  // ✅ FIX: Dia atual do ciclo vem via query param ?cycleDay=N
-  // O front-end passa o valor do localStorage (CYCLE_KEY)
-  const url      = new URL(req.url);
-  const cycleDay = parseInt(url.searchParams.get("cycleDay") ?? "0", 10);
+  // Lê cycleDay do banco (UserCycleState) — fonte única de verdade
+  // Query param ?cycleDay=N mantido como fallback para compatibilidade
+  const url           = new URL(req.url);
+  const cycleState    = await prisma.userCycleState.findUnique({ where: { userId: uid } });
+  const cycleDayBank  = cycleState?.currentDayIdx ?? null;
+  const cycleDay      = cycleDayBank !== null
+    ? cycleDayBank
+    : parseInt(url.searchParams.get("cycleDay") ?? "0", 10);
 
   const nowUTC = new Date();
   nowUTC.setHours(0, 0, 0, 0);

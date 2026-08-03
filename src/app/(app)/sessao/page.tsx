@@ -47,7 +47,7 @@ function SessaoContent() {
   const [topicId,        setTopicId]        = useState("");
   const [category,       setCategory]       = useState("Teoria");
   const [material,       setMaterial]       = useState("");
-  const [studyTime,      setStudyTime]      = useState("");
+  const [studyTime,      setStudyTime]      = useState("00:00:00");
   const [theoryDone,     setTheoryDone]     = useState(false);
   const [scheduleReview, setScheduleReview] = useState(false);
   const [reviewTags,     setReviewTags]     = useState<string[]>(DEFAULT_REVIEWS);

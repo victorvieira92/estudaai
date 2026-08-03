@@ -119,7 +119,7 @@ export default function HojePage() {
   const [completing,     setCompleting]     = useState(false);
 
   useEffect(() => {
-    fetch(`/api/schedule?cycleDay=${localStorage.getItem(getCycleKey(uid)) ?? '0'}`)
+    fetch(`/api/schedule`)
       .then(r => r.json())
       .then(setData)
       .catch(console.error)
