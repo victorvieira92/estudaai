@@ -47,7 +47,7 @@ function SessaoContent() {
   const [topicId,        setTopicId]        = useState("");
   const [category,       setCategory]       = useState("Teoria");
   const [material,       setMaterial]       = useState("");
-  const [studyTime,      setStudyTime]      = useState("00:00:00");
+  const [studyTime,      setStudyTime]      = useState("");
   const [theoryDone,     setTheoryDone]     = useState(false);
   const [scheduleReview, setScheduleReview] = useState(false);
   const [reviewTags,     setReviewTags]     = useState<string[]>(DEFAULT_REVIEWS);
@@ -136,7 +136,7 @@ function SessaoContent() {
     setSaving(true); setError("");
 
     // parse studyTime HH:MM:SS → seconds → hours
-    const [hh, mm, ss] = studyTime.split(":").map(Number);
+    const [hh, mm, ss] = (studyTime || "00:00:00").split(":").map(Number);
     const seconds = (hh || 0) * 3600 + (mm || 0) * 60 + (ss || 0);
     const hours   = seconds / 3600;
     const duration = Math.max(1, Math.round(hours * 60));
