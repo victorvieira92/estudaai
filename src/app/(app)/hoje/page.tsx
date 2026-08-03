@@ -133,10 +133,19 @@ export default function HojePage() {
       })) : [];
       setCicloBlocks(mapped);
       const days  = getCycleDays(mapped);
-      const saved = parseInt(localStorage.getItem(getCycleKey(uid)) ?? "0", 10);
-      setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
-      try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
-      try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
+      // Lê currentDayIdx do BANCO (fonte única de verdade, sincronizada com calendário e sessão)
+      fetch("/api/cycle-state").then(r => r.json()).then(cs => {
+        const savedIdx = typeof cs?.currentDayIdx === "number" ? cs.currentDayIdx : 0;
+        setCurrentDayIdx(Math.min(savedIdx, Math.max(0, days.length - 1)));
+        // localStorage mantido só para pendingBlocks e doneIds (estado local da fila)
+        try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
+        try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
+      }).catch(() => {
+        const saved = parseInt(localStorage.getItem(getCycleKey(uid)) ?? "0", 10);
+        setCurrentDayIdx(Math.min(saved, Math.max(0, days.length - 1)));
+        try { setPendingBlocks(JSON.parse(localStorage.getItem(getPendingKey(uid)) ?? "[]")); } catch { setPendingBlocks([]); }
+        try { setDoneIds(new Set(JSON.parse(localStorage.getItem(getDoneKey(uid)) ?? "[]"))); } catch { setDoneIds(new Set()); }
+      });
     }).catch(console.error);
   }, []);
 
@@ -174,10 +183,20 @@ export default function HojePage() {
     });
   };
 
-  const concludeDay = () => {
+  const concludeDay = async () => {
     setCompleting(true);
     const undone  = allCiclo.filter(b => !doneIds.has(b.id));
     const nextIdx = (currentDayIdx + 1) % cycleDays.length;
+    // Salva no banco (fonte única — sincroniza com calendário e sessão de estudos)
+    try {
+      const cs = await fetch("/api/cycle-state").then(r => r.json()).catch(() => ({}));
+      await fetch("/api/cycle-state", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentDayIdx: nextIdx, dayStates: cs?.dayStates ?? {} }),
+      });
+    } catch (e) { console.error(e); }
+    // Mantém localStorage para pendingBlocks e doneIds (estado local da fila)
     localStorage.setItem(getCycleKey(uid),   String(nextIdx));
     localStorage.setItem(getPendingKey(uid), JSON.stringify(undone));
     localStorage.setItem(getDoneKey(uid),    "[]");
