@@ -44,7 +44,7 @@ function SessaoContent() {
   const [subjects,       setSubjects]       = useState<Subject[]>([]);
   const [loading,        setLoading]        = useState(true);
   const [subjectId,      setSubjectId]      = useState("");
-  const [topicId,        setTopicId]        = useState("");
+  const [topicIds,       setTopicIds]       = useState<Set<string>>(new Set());
   const [category,       setCategory]       = useState("Teoria");
   const [material,       setMaterial]       = useState("");
   const [studyTime,      setStudyTime]      = useState("00:00:00");
@@ -77,7 +77,8 @@ function SessaoContent() {
   const [advancingCycle,  setAdvancingCycle]  = useState(false);
 
   const subject  = subjects.find(s => s.id === subjectId);
-  const topic    = subject?.topics.find(t => t.id === topicId);
+  const selectedTopics = subject?.topics.filter(t => topicIds.has(t.id)) ?? [];
+  const topic = selectedTopics[0] ?? null;
   const canSave  = !!subjectId;
 
   // ── Carregar disciplinas ──────────────────────────────────────────────
@@ -93,13 +94,13 @@ function SessaoContent() {
       setSubjectId(matched.id);
       const firstTopic = matched.topics.find(t => t.pdfs.some(p => !p.completed));
       if (!firstTopic) return;
-      setTopicId(firstTopic.id);
+      setTopicIds(new Set([firstTopic.id]));
     }).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { setTopicId(""); setMaterial(""); }, [subjectId]);
-  useEffect(() => { setMaterial(""); }, [topicId]);
+  useEffect(() => { setTopicIds(new Set()); setMaterial(""); }, [subjectId]);
+  useEffect(() => { setMaterial(""); }, [topicIds]);
 
   // ── Tags de revisão ───────────────────────────────────────────────────
   const addReviewTag = () => {
@@ -123,7 +124,7 @@ function SessaoContent() {
 
   // ── Salvar ────────────────────────────────────────────────────────────
   const resetForm = () => {
-    setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicId("");
+    setStudyTime("00:00:00"); setCategory("Teoria"); setSubjectId(""); setTopicIds(new Set());
     setMaterial(""); setTheoryDone(false); setScheduleReview(false);
     setReviewTags(DEFAULT_REVIEWS); setCorrect("0"); setWrong("0"); setQInicial(""); setQFinal(""); setQErros("");
     setPages([{ id: uid(), start: "0", end: "0" }]);
@@ -165,29 +166,44 @@ function SessaoContent() {
     const resolvedEnd    = parseInt(firstPageRange?.end   ?? "0") || 0;
 
     try {
-      const res = await fetch("/api/study-sessions", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subjectId, topicId,
-          pdfId:     resolvedPdfId,
-          hours, duration,
-          startPage: resolvedStart,
-          endPage:   resolvedEnd,
-          totalPages: 0,
-          questions:        (parseInt(correct) || 0) + (parseInt(wrong) || 0),
-          correctQuestions: parseInt(correct) || 0,
-          wrongQuestions:   parseInt(wrong)   || 0,
-          completed:        theoryDone,
-          category,
-          topicName: topic?.name ?? "",
-          pdfTitle:  material,
-          comment,
-          studyDate,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message ?? "Erro ao salvar.");
+      // Se múltiplos tópicos, divide tempo e questões igualmente entre eles
+      const topicList = selectedTopics.length > 0
+        ? selectedTopics
+        : [{ id: "", name: "" }]; // sem tópico selecionado
+      const splitHours     = hours / topicList.length;
+      const splitDuration  = Math.max(1, Math.round(duration / topicList.length));
+      const totalQ         = (parseInt(correct) || 0) + (parseInt(wrong) || 0);
+      const splitCorrect   = Math.round((parseInt(correct) || 0) / topicList.length);
+      const splitWrong     = Math.round((parseInt(wrong)   || 0) / topicList.length);
+      const splitQ         = Math.round(totalQ / topicList.length);
+
+      for (const t of topicList) {
+        const res = await fetch("/api/study-sessions", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subjectId, topicId: t.id,
+            pdfId:     resolvedPdfId,
+            hours:     splitHours,
+            duration:  splitDuration,
+            startPage: resolvedStart,
+            endPage:   resolvedEnd,
+            totalPages: 0,
+            questions:        splitQ,
+            correctQuestions: splitCorrect,
+            wrongQuestions:   splitWrong,
+            completed:        theoryDone,
+            category,
+            topicName: t.name,
+            pdfTitle:  material,
+            comment,
+            studyDate,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message ?? "Erro ao salvar.");
+      }
+      const res = { ok: true };
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
 
@@ -358,14 +374,30 @@ function SessaoContent() {
             {/* ── Linha 2: TÓPICO | MATERIAL ── */}
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <label className={labelCls}>Tópico</label>
-                <div className="relative">
-                  <select value={topicId} onChange={e => setTopicId(e.target.value)} disabled={!subject} className={selectBox}>
-                    <option value="">Selecione...</option>
-                    {(subject?.topics ?? []).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <ChevronDown size={13} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                </div>
+                <label className={labelCls}>Tópico {topicIds.size > 1 && <span className="text-teal-600 normal-case font-normal">({topicIds.size} selecionados — tempo dividido)</span>}</label>
+                {!subject ? (
+                  <div className="border-b-2 border-teal-400 py-2 text-sm text-gray-300">Selecione uma disciplina primeiro</div>
+                ) : (
+                  <div className="max-h-36 overflow-y-auto border-b-2 border-teal-400 py-1 space-y-1">
+                    {(subject?.topics ?? []).map(t => {
+                      const checked = topicIds.has(t.id);
+                      return (
+                        <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                          <span className={`w-3.5 h-3.5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "border-teal-500 bg-teal-500" : "border-gray-300"}`}>
+                            {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                          </span>
+                          <input type="checkbox" checked={checked} className="sr-only"
+                            onChange={() => setTopicIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                              return next;
+                            })} />
+                          <span className="text-sm text-gray-700 truncate">{t.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelCls}>Material</label>

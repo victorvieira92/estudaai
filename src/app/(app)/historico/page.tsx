@@ -251,6 +251,7 @@ export default function HistoricoPage() {
 
   const searchParams      = useSearchParams();
   const [filterSubjectId, setFilterSubjectId] = useState<string>(searchParams.get("subjectId") ?? "all");
+  const [filterTopic,     setFilterTopic]     = useState<string>("all");
   const [commentId,   setCommentId]   = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
   const [editId,      setEditId]      = useState<string | null>(null);
@@ -316,14 +317,26 @@ export default function HistoricoPage() {
     setSaving(false); setDeleteId(null); load();
   };
 
-  const filteredData = filterSubjectId === "all"
-    ? data
-    : data.map(g => ({
-        ...g,
-        sessions:   g.sessions.filter(s => s.subjectId === filterSubjectId),
-        totalHours: g.sessions.filter(s => s.subjectId === filterSubjectId).reduce((a, s) => a + s.hours, 0),
-        totalHoursFormatted: fmtH(g.sessions.filter(s => s.subjectId === filterSubjectId).reduce((a, s) => a + s.hours, 0)),
-      })).filter(g => g.sessions.length > 0);
+  const sessionMatchesFilter = (s: Session) => {
+    if (filterSubjectId !== "all" && s.subjectId !== filterSubjectId) return false;
+    if (filterTopic !== "all" && s.topicName !== filterTopic) return false;
+    return true;
+  };
+  const filteredData = data.map(g => ({
+    ...g,
+    sessions: g.sessions.filter(sessionMatchesFilter),
+    totalHours: g.sessions.filter(sessionMatchesFilter).reduce((a, s) => a + s.hours, 0),
+    totalHoursFormatted: fmtH(g.sessions.filter(sessionMatchesFilter).reduce((a, s) => a + s.hours, 0)),
+  })).filter(g => g.sessions.length > 0);
+
+  // Tópicos disponíveis para a matéria selecionada
+  const availableTopics = filterSubjectId === "all"
+    ? []
+    : [...new Set(
+        data.flatMap(g => g.sessions)
+          .filter(s => s.subjectId === filterSubjectId && s.topicName)
+          .map(s => s.topicName)
+      )].sort();
 
   const totalHours     = filteredData.reduce((a, g) => a + g.totalHours, 0);
   const totalQuestions = filteredData.reduce((a, g) => g.sessions.reduce((b, s) => b + s.questions, a), 0);
@@ -369,7 +382,7 @@ export default function HistoricoPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filtrar por matéria:</span>
             <button
-              onClick={() => setFilterSubjectId("all")}
+              onClick={() => { setFilterSubjectId("all"); setFilterTopic("all"); }}
               className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
               style={filterSubjectId === "all" ? { backgroundColor: BG, color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
               Todas
@@ -377,12 +390,36 @@ export default function HistoricoPage() {
             {subjects.map(sub => (
               <button
                 key={sub.id}
-                onClick={() => setFilterSubjectId(sub.id)}
+                onClick={() => { setFilterSubjectId(sub.id); setFilterTopic("all"); }}
                 className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
                 style={filterSubjectId === sub.id
                   ? { backgroundColor: getColor(sub.id), color: "#fff" }
                   : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
                 {sub.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Filtro por tópico — aparece só quando uma matéria está selecionada */}
+        {filterSubjectId !== "all" && availableTopics.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filtrar por tópico:</span>
+            <button
+              onClick={() => setFilterTopic("all")}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+              style={filterTopic === "all" ? { backgroundColor: BG, color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+              Todos
+            </button>
+            {availableTopics.map(topic => (
+              <button
+                key={topic}
+                onClick={() => setFilterTopic(topic)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                style={filterTopic === topic
+                  ? { backgroundColor: BG, color: "#fff" }
+                  : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+                {topic}
               </button>
             ))}
           </div>
