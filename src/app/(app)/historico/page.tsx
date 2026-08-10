@@ -401,27 +401,20 @@ export default function HistoricoPage() {
           </div>
         )}
 
-        {/* Filtro por tópico — aparece só quando uma matéria está selecionada */}
+        {/* Filtro por tópico — dropdown */}
         {filterSubjectId !== "all" && availableTopics.length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filtrar por tópico:</span>
-            <button
-              onClick={() => setFilterTopic("all")}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
-              style={filterTopic === "all" ? { backgroundColor: BG, color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
-              Todos
-            </button>
-            {availableTopics.map(topic => (
-              <button
-                key={topic}
-                onClick={() => setFilterTopic(topic)}
-                className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
-                style={filterTopic === topic
-                  ? { backgroundColor: BG, color: "#fff" }
-                  : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
-                {topic}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tópico:</span>
+            <select
+              value={filterTopic}
+              onChange={e => setFilterTopic(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1"
+              style={{ maxWidth: 340 }}>
+              <option value="all">Todos os tópicos</option>
+              {availableTopics.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
         )}
 
