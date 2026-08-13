@@ -157,6 +157,10 @@ export default function CicloPage() {
 
       const savedDayStates: Record<string, DayState> = stateRes?.dayStates ?? {};
       setDateToDayState(savedDayStates);
+      // currentDayIdx do banco — dia atual real do ciclo
+      if (typeof stateRes?.currentDayIdx === "number") {
+        setCurrentDayIdx(stateRes.currentDayIdx);
+      }
 
       const today = toBRDate(new Date());
       setViewWeek(getMondayOfWeek(today));
@@ -261,7 +265,8 @@ export default function CicloPage() {
     const todayWeek = getMondayOfWeek(today);
     const cycleIdx  = jsDoWtoCycleIdx(new Date(today + "T12:00:00Z").getUTCDay());
 
-    const isToday   = date === today && weekMonday === todayWeek;
+    // "today" = quando o idx do ciclo bate com o currentDayIdx do banco
+    const isToday   = idx === currentDayIdx && weekMonday === todayWeek;
     const isFuture  = date > today;
     const dayBlocks = blocks.filter(b => b.dayOfWeek === idx);
 
@@ -278,6 +283,7 @@ export default function CicloPage() {
 
   // ── Verifica celebração quando sessões ou marcações mudam ───────────────────
   const [celebrationShown, setCelebrationShown] = useState(false);
+  const [currentDayIdx,   setCurrentDayIdx]   = useState(0);
   useEffect(() => {
     if (!blocks.length || loading) return;
     const today = toBRDate(new Date());
@@ -297,8 +303,9 @@ export default function CicloPage() {
 
   // ── Dados do dia atual ───────────────────────────────────────────────────────
   const today      = toBRDate(new Date());
-  const todayJsDoW = new Date(today + "T12:00:00Z").getUTCDay();
-  const todayIdx   = jsDoWtoCycleIdx(todayJsDoW);
+  // Usa currentDayIdx do banco (não o dia da semana) para determinar o dia atual do ciclo
+  const cycleDayKeys = [...new Set(blocks.map(b => b.dayOfWeek))].sort((a, b) => a - b);
+  const todayIdx     = cycleDayKeys[currentDayIdx] ?? cycleDayKeys[0] ?? 0;
   const todayBlocks = blocks.filter(b => b.dayOfWeek === todayIdx);
   const todayDoneMap = computeBlockDoneMap(today, todayBlocks);
   const todayDone  = todayBlocks.filter(b => todayDoneMap[b.id]).length;
@@ -354,7 +361,7 @@ export default function CicloPage() {
               <h1 className="text-2xl font-bold">Fila do Dia</h1>
             </div>
             <p className="text-sm opacity-60">
-              Dia {todayIdx + 1} do ciclo · {fmt(todayHours)} programadas · {todayDone}/{todayBlocks.length} feitos
+              Dia {currentDayIdx + 1} do ciclo · {fmt(todayHours)} programadas · {todayDone}/{todayBlocks.length} feitos
             </p>
           </div>
         </div>
@@ -376,7 +383,7 @@ export default function CicloPage() {
 
         {/* ── Blocos de hoje ── */}
         <div>
-          <p className="text-sm font-semibold text-gray-500 mb-2 px-1">Dia {todayIdx + 1} do ciclo — {fmtShort(today)}</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2 px-1">Dia {currentDayIdx + 1} do ciclo — {fmtShort(today)}</p>
           <div className="space-y-2">
             {todayBlocks.length === 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-400 text-sm">
