@@ -99,6 +99,66 @@ export async function POST(req: Request) {
       }
     });
 
+    // ── Motor de Consolidação: detecta sessão de Revisão e atualiza intervalos ──
+    const category = body.category ?? "";
+    if (category === "Revisão" || category === "Revisao") {
+      const topicNameStr = (body.topicName ?? "").trim();
+      const todayStr     = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+
+      // 1. Marca Reviews de PDF do mesmo subject como concluídas
+      const pdfTitleStr = (body.pdfTitle ?? "").trim();
+      if (pdfTitleStr) {
+        await prisma.review.updateMany({
+          where: {
+            completed:  false,
+            reviewDate: { lte: new Date(todayStr + "T23:59:59-03:00") },
+            pdf: {
+              title: { equals: pdfTitleStr, mode: "insensitive" },
+              topic: { subject: { userId: uid, id: subjectId } },
+            },
+          },
+          data: { completed: true },
+        });
+      }
+
+      // 2. Atualiza ErrorNotes do mesmo subject/tópico
+      const errorNotes = await prisma.errorNote.findMany({
+        where: {
+          userId:    uid,
+          subjectId: subjectId,
+          resolved:  false,
+          nextReviewAt: { lte: new Date(todayStr + "T23:59:59-03:00") },
+          ...(topicNameStr ? { title: { contains: topicNameStr, mode: "insensitive" } } : {}),
+        },
+      });
+
+      for (const note of errorNotes) {
+        // Calcula novo intervalo baseado na performance da sessão
+        const accuracy = questions > 0 ? correct / questions : 1;
+        let nextInterval: number;
+        if      (accuracy >= 0.9)  nextInterval = Math.min(30, note.intervalDays * 2); // ótimo → dobra
+        else if (accuracy >= 0.7)  nextInterval = Math.max(7, note.intervalDays);      // bom → mantém
+        else if (accuracy >= 0.5)  nextInterval = Math.max(3, Math.floor(note.intervalDays / 2)); // médio → reduz
+        else                       nextInterval = 1;                                    // ruim → revisão amanhã
+
+        const nextDate = new Date(todayStr);
+        nextDate.setDate(nextDate.getDate() + nextInterval);
+
+        await prisma.errorNote.update({
+          where: { id: note.id },
+          data:  {
+            reviewCount:    { increment: 1 },
+            wrongCount:     { increment: wrong },
+            intervalDays:   nextInterval,
+            lastReviewedAt: new Date(),
+            nextReviewAt:   nextDate,
+            resolved:       wrong === 0 && note.reviewCount >= 2,
+          },
+        });
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     await recalcSubjectWithSessions(subjectId, uid);
     if (topicId) await recalcTopic(topicId, uid);
 

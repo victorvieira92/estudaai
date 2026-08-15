@@ -22,6 +22,10 @@ function priorityLabel(score: number): { label: string; color: string; bg: strin
   return               { label: "Normal",    color: "#16A34A", bg: "#F0FDF4" };
 }
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+}
+
 function ScoreBar({ score, max }: { score: number; max: number }) {
   const pct = Math.min(100, Math.round((score / Math.max(max, 1)) * 100));
   const color = score >= 30 ? "#DC2626" : score >= 20 ? "#EA580C" : score >= 10 ? "#CA8A04" : "#16A34A";
@@ -71,7 +75,7 @@ function ReviewCard({ item, maxScore, onDone }: { item: ConsolidationItem; maxSc
           </span>
 
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{item.title}</p>
+            <p className="text-sm font-semibold text-gray-900 truncate">{stripHtml(item.title)}</p>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               <span className="text-xs text-gray-500">{item.subjectName}</span>
               <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">

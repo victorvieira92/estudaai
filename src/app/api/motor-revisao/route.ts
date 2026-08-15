@@ -102,8 +102,9 @@ export async function GET() {
     const overdue    = daysDiff(e.nextReviewAt, today);
     const overduePos = Math.max(0, overdue);
 
-    // Score: peso edital × 2 + erros × 3 + instabilidade × 2 + urgência × 1.5
-    const score = (weight * 2) + (e.wrongCount * 3) + (instab * 2) + (overduePos * 1.5);
+    // Score: peso edital × 2 + erros × 2 + instabilidade × 2 + urgência × 1 (cap 30d)
+    const overdueCapped = Math.min(overduePos, 30); // limita em 30 dias para não distorcer
+    const score = (weight * 2) + (e.wrongCount * 2) + (instab * 2) + (overdueCapped * 1);
 
     // Próximo intervalo: se errou recentemente, reduz; se está em dia, aumenta
     let nextInterval = e.intervalDays;
@@ -151,8 +152,9 @@ export async function GET() {
     const errorRate = totalQ > 0 ? wrongQ / totalQ : 0;
     const instab    = errorRate;
 
-    // Score: peso edital × 2 + erros × 1.5 + instabilidade × 5 + urgência × 2
-    const score = (weight * 2) + (wrongQ * 1.5) + (instab * 100 * 0.05) + (overduePos * 2);
+    // Score: peso edital × 2 + erros × 1 + instabilidade × 10 + urgência × 1.5 (cap 30d)
+    const overdueCapped = Math.min(overduePos, 30);
+    const score = (weight * 2) + (wrongQ * 1) + (instab * 10) + (overdueCapped * 1.5);
 
     // Tipo de revisão em texto
     const reviewTypeMap: Record<string, string> = {
