@@ -10,6 +10,10 @@ import { prisma } from "@/lib/prisma";
 // 3. Instabilidade do conteúdo (wrongCount / reviewCount)
 // 4. Urgência temporal (dias em atraso + intervalo da curva de esquecimento)
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").trim();
+}
+
 function toBRToday(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
@@ -121,7 +125,7 @@ export async function GET() {
     items.push({
       id:            e.id,
       type:          "errorNote",
-      title:         e.title,
+      title:         stripHtml(e.title),
       subjectName:   subj.name,
       subjectId:     e.subjectId,
       editalWeight:  weight,
