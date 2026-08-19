@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle, Clock, TrendingUp, BookOpen, RefreshCw, ChevronDown, ChevronUp, Filter } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, TrendingUp, BookOpen, RefreshCw, ChevronDown, ChevronUp, Filter, Brain, Zap, BarChart2 } from "lucide-react";
 
 const BG = "#1B4040";
 
@@ -175,6 +175,175 @@ function ReviewCard({ item, maxScore, onDone }: { item: ConsolidationItem; maxSc
   );
 }
 
+interface TopicForgetting {
+  subjectId: string; subjectName: string; subjectWeight: number;
+  topicName: string; lastStudied: string; daysSinceStudy: number;
+  sessions: number; accuracy: number; retentionPct: number;
+  urgency: number; questions: number;
+}
+
+function RetentionBar({ pct }: { pct: number }) {
+  const color = pct >= 70 ? "#16A34A" : pct >= 40 ? "#CA8A04" : "#DC2626";
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
+      </div>
+      <span className="text-xs font-mono w-8 text-right" style={{ color }}>{pct}%</span>
+    </div>
+  );
+}
+
+function CurvaEsquecimentoPanel() {
+  const [topics,    setTopics]    = useState<TopicForgetting[]>([]);
+  const [loading,   setLoading]   = useState(true);
+  const [selected,  setSelected]  = useState<Set<string>>(new Set());
+  const [generating, setGenerating] = useState(false);
+  const [suggestion, setSuggestion] = useState<string>("");
+  const [error,     setError]     = useState<string>("");
+  const [filter,    setFilter]    = useState<"all" | "critical" | "warning">("all");
+
+  useEffect(() => {
+    fetch("/api/curva-esquecimento")
+      .then(r => r.json())
+      .then(setTopics)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleSelect = (key: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  const generateBattery = async () => {
+    const selectedTopics = topics.filter(t => selected.has(`${t.subjectId}::${t.topicName}`));
+    if (!selectedTopics.length) return;
+    setGenerating(true);
+    setSuggestion("");
+    setError("");
+    const res = await fetch("/api/gemini-revisao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topics: selectedTopics }),
+    });
+    const data = await res.json();
+    if (data.error) setError(data.error);
+    else setSuggestion(data.suggestion);
+    setGenerating(false);
+  };
+
+  const filtered = topics.filter(t => {
+    if (filter === "critical") return t.retentionPct < 40;
+    if (filter === "warning")  return t.retentionPct >= 40 && t.retentionPct < 70;
+    return true;
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Brain className="w-5 h-5 text-purple-600" />
+            <h2 className="text-base font-semibold">Curva de Esquecimento por Tópico</h2>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(["all","critical","warning"] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors"
+                style={filter === f ? { backgroundColor: "#1B4040", color: "#fff" } : { backgroundColor: "#f3f4f6", color: "#6b7280" }}>
+                {f === "all" ? "Todos" : f === "critical" ? "🔴 Crítico (<40%)" : "🟡 Atenção (40-70%)"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse"/>)}</div>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-gray-400 py-6 text-sm">Nenhum tópico encontrado. Registre sessões de estudo para ver a curva.</p>
+        ) : (
+          <div className="space-y-2">
+            {filtered.slice(0, 20).map(t => {
+              const key     = `${t.subjectId}::${t.topicName}`;
+              const checked = selected.has(key);
+              return (
+                <div key={key} onClick={() => toggleSelect(key)}
+                  className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? "border-purple-400 bg-purple-50" : "border-gray-100 hover:border-gray-300"}`}>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "border-purple-500 bg-purple-500" : "border-gray-300"}`}>
+                    {checked && <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{t.topicName}</p>
+                      <span className="text-xs text-gray-400 shrink-0">{t.subjectName}</span>
+                    </div>
+                    <RetentionBar pct={t.retentionPct} />
+                  </div>
+                  <div className="text-right shrink-0 space-y-0.5">
+                    <p className="text-xs text-gray-400">{t.daysSinceStudy}d atrás</p>
+                    <p className="text-xs text-gray-400">{t.accuracy}% acerto</p>
+                    <p className="text-xs text-gray-400">{t.sessions} sessões</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {selected.size > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+            <p className="text-sm text-gray-600">
+              <span className="font-semibold text-purple-600">{selected.size}</span> tópico{selected.size !== 1 ? "s" : ""} selecionado{selected.size !== 1 ? "s" : ""}
+            </p>
+            <button onClick={generateBattery} disabled={generating}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-60 transition-colors"
+              style={{ backgroundColor: "#7C3AED" }}>
+              <Zap className="w-4 h-4" />
+              {generating ? "Gerando com IA..." : "Gerar bateria de exercícios com IA"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {generating && (
+        <div className="bg-white rounded-2xl border border-purple-200 p-6 text-center">
+          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-600">O Gemini está analisando seu histórico e criando exercícios personalizados...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 rounded-2xl border border-red-200 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      {suggestion && (
+        <div className="bg-white rounded-2xl border border-purple-200 overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-4 border-b border-purple-100" style={{ backgroundColor: "#F5F3FF" }}>
+            <Brain className="w-5 h-5 text-purple-600" />
+            <h3 className="text-base font-semibold text-purple-900">Bateria de Exercícios — Gerado pelo Gemini</h3>
+          </div>
+          <div className="p-5 prose prose-sm max-w-none">
+            {suggestion.split("\n").map((line, i) => {
+              if (line.startsWith("## ")) return <h2 key={i} className="text-lg font-bold text-gray-900 mt-4 mb-2">{line.replace("## ", "")}</h2>;
+              if (line.startsWith("### ")) return <h3 key={i} className="text-base font-semibold text-gray-800 mt-3 mb-1">{line.replace("### ", "")}</h3>;
+              if (line.startsWith("**") && line.endsWith("**")) return <p key={i} className="font-semibold text-gray-900 mt-2">{line.replace(/\*\*/g, "")}</p>;
+              if (line.startsWith("- ") || line.startsWith("• ")) return <p key={i} className="text-gray-700 pl-3 border-l-2 border-purple-200 my-1">{line.replace(/^[-•] /, "")}</p>;
+              if (/^\d+\./.test(line)) return <p key={i} className="text-gray-700 my-1 font-medium">{line}</p>;
+              if (line.trim() === "") return <br key={i} />;
+              return <p key={i} className="text-gray-700 my-1">{line}</p>;
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RevisoesPage() {
   const [items,     setItems]     = useState<ConsolidationItem[]>([]);
   const [summary,   setSummary]   = useState<Summary | null>(null);
@@ -242,6 +411,16 @@ export default function RevisoesPage() {
             ))}
           </div>
         )}
+
+        {/* Curva de Esquecimento + IA */}
+        <CurvaEsquecimentoPanel />
+
+        {/* Divisor */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 h-px bg-gray-200" />
+          <span className="text-xs text-gray-400 font-medium uppercase tracking-wide">Motor de Consolidação</span>
+          <div className="flex-1 h-px bg-gray-200" />
+        </div>
 
         {/* Filtros */}
         <div className="flex flex-wrap gap-2 items-center">
