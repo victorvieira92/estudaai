@@ -33,7 +33,7 @@ Seja direto, técnico e focado no que cai em prova. Use linguagem de concursos.`
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,8 +47,8 @@ Seja direto, técnico e focado no que cai em prova. Use linguagem de concursos.`
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("[Gemini API error]", data);
-      return NextResponse.json({ error: "Erro na API do Gemini.", detail: data?.error?.message }, { status: 500 });
+      console.error("[Gemini API error]", JSON.stringify(data));
+      return NextResponse.json({ error: `Erro na API do Gemini: ${data?.error?.message ?? JSON.stringify(data)}` }, { status: 500 });
     }
 
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
